@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: data:; media-src asset:; font-src 'self' asset:; connect-src 'self' asset:; object-src 'none'; frame-src 'none'; base-uri 'none'">
+  <title>Eagle 开源</title><link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="titlebar"><span class="app-title">Eagle 开源 <span>素材管理 · 0.1</span></span><span class="privacy"><i data-lucide="hard-drive"></i>本地素材库</span></div>
+  <div class="workspace">
+    <aside class="sidebar">
+      <div class="library-heading"><div class="library-icon"><i data-lucide="archive"></i></div><div><strong>我的素材库</strong><small id="library-subtitle">正在读取…</small></div><button id="connect" class="icon-button" title="只读接入 Eagle 库" aria-label="只读接入 Eagle 库"><i data-lucide="plug"></i></button></div>
+      <nav id="navigation"></nav>
+      <div class="section-heading">文件夹 <span id="folder-total"></span><button id="new-folder" class="icon-button" title="新建文件夹" aria-label="新建文件夹"><i data-lucide="plus"></i></button></div>
+      <div class="folder-filter"><i data-lucide="search"></i><input id="folder-filter" placeholder="筛选文件夹" aria-label="筛选文件夹"></div>
+      <div id="folders" class="folder-tree"></div>
+      <div class="sidebar-bottom"><span class="status-dot"></span><span id="source-status">原库只读 · 编辑独立保存</span><button id="refresh" class="icon-button" title="刷新原库 ⌘R" aria-label="刷新原库"><i data-lucide="refresh-cw"></i></button></div>
+    </aside>
+    <main class="content">
+      <header class="toolbar"><div class="breadcrumb"><i data-lucide="inbox" id="view-icon"></i><strong id="view-title">全部素材</strong><span id="result-count"></span></div><div class="toolbar-actions"><button id="import-folder" class="icon-button" title="导入文件夹" aria-label="导入文件夹"><i data-lucide="folder-input"></i></button><button id="import" class="primary"><i data-lucide="plus"></i>导入素材</button></div></header>
+      <div class="filterbar"><label class="search-box"><i data-lucide="search"></i><input id="search" placeholder="搜索名称、标签、描述" aria-label="搜索素材"><kbd>⌘F</kbd><button id="clear-search" class="icon-button hidden" title="清除搜索" aria-label="清除搜索"><i data-lucide="x"></i></button></label><select id="kind" aria-label="素材类型"><option value="all">全部类型</option><option value="image">图片</option><option value="video">视频</option><option value="audio">音频</option><option value="font">字体</option><option value="file">其他文件</option></select><select id="sort" aria-label="排序"><option value="newest">添加时间 ↓</option><option value="oldest">添加时间 ↑</option><option value="name">名称 A–Z</option><option value="size">文件大小 ↓</option></select></div>
+      <div id="tag-filter" class="active-filter hidden"></div><div id="warnings" class="warnings hidden"></div>
+      <div id="tag-browser" class="tag-browser hidden"></div>
+      <div id="grid-scroll" class="grid-scroll" tabindex="0"><div id="grid" class="asset-grid"></div><div id="empty" class="empty hidden"><i data-lucide="images"></i><h2>把灵感收进来</h2><p>拖入图片、视频、音频或文件夹<br>也可以从上方导入素材</p><button class="secondary" id="empty-import">导入第一份素材</button></div><button id="load-more" class="load-more hidden">加载更多素材</button></div>
+      <footer class="statusbar"><span id="selection-status">正在读取素材…</span><span class="keyboard-hint">空格预览 · 方向键切换</span><div class="zoom"><i data-lucide="image"></i><input id="zoom" type="range" min="110" max="280" value="180" aria-label="缩略图大小"><i data-lucide="image"></i></div></footer>
+    </main>
+    <aside id="inspector" class="inspector"></aside>
+  </div>
+  <div id="drop-overlay" class="drop-overlay hidden"><i data-lucide="download"></i><h2>松开，收进素材库</h2><p>复制保存原文件 · 自动生成预览</p></div>
+  <div id="toast" class="toast hidden" role="status"></div>
+  <dialog id="folder-dialog"><form id="folder-form"><h2>新建文件夹</h2><label>名称<input id="folder-name" required maxlength="200" placeholder="例如：人物故事参考"></label><label>上级文件夹<select id="folder-parent"></select></label><div class="dialog-actions"><button type="button" class="secondary" data-close="folder-dialog">取消</button><button class="primary" type="submit">创建文件夹</button></div></form></dialog>
+  <dialog id="assign-dialog"><form id="assign-form"><h2>整理到文件夹</h2><p>可以同时加入多个分类</p><div id="assign-folders" class="assign-folders"></div><div class="dialog-actions"><button type="button" class="secondary" data-close="assign-dialog">取消</button><button class="primary" type="submit">保存分类</button></div></form></dialog>
+  <dialog id="preview-dialog" class="preview-dialog"><div class="preview-header"><span id="preview-name"></span><div><button id="preview-prev" class="icon-button" title="上一个" aria-label="上一个"><i data-lucide="chevron-left"></i></button><button id="preview-next" class="icon-button" title="下一个" aria-label="下一个"><i data-lucide="chevron-right"></i></button><button id="preview-close" class="icon-button" title="关闭预览 Esc" aria-label="关闭预览"><i data-lucide="x"></i></button></div></div><div id="preview-body"></div><div class="preview-footer"><span id="preview-info"></span><span>← → 切换 · Esc 关闭</span></div></dialog>
+  <script src="vendor/lucide.js"></script><script src="renderer.js"></script>
+</body></html>

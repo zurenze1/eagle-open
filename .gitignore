@@ -1,0 +1,8 @@
+client/node_modules/
+client/workspace.json
+data/
+verification/
+build/
+dist/
+.DS_Store
+*.log

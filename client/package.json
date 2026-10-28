@@ -1,0 +1,28 @@
+{
+  "name": "eagle-open",
+  "version": "0.1.0",
+  "description": "独立 macOS 素材管理客户端，原 Eagle 库只读接入",
+  "main": "src/main.cjs",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/library.test.cjs",
+    "test:ui": "node scripts/make-fixtures.cjs && node test/electron.test.cjs",
+    "package": "node scripts/package.cjs"
+  },
+  "keywords": [],
+  "author": "祖仁泽",
+  "license": "UNLICENSED",
+  "type": "commonjs",
+  "dependencies": {
+    "fuse.js": "7.1.0"
+  },
+  "devDependencies": {
+    "@electron/packager": "20.3.0",
+    "electron": "45.1.0",
+    "playwright-core": "1.64.1"
+  },
+  "private": true
+}
