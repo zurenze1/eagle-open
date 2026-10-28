@@ -10,6 +10,6 @@
 | TagSpaces search | 4.8.9 | filters.js 标签组合筛选 | MIT；同上模块仓库；src/vendor/LICENSE-tagspaces-search |
 | Lucide | 0.577.0 | 界面 SVG 图标 | ISC；https://github.com/lucide-icons/lucide ；src/vendor/LICENSE-lucide |
 
-TagSpaces npm 发布的 gitHead 为 `35a1d601cc47a62745eea22b0dc2861569679f40`。裁剪文件保留版权；仅更改 require 路径指向本地 AppConfig.cjs。未复制 AGPL 主应用的实现、未使用可选 Pro 模块。完整上游源码在项目 upstream/，作为调研参考，不打进应用。
+TagSpaces npm 发布的 gitHead 为 `35a1d601cc47a62745eea22b0dc2861569679f40`。裁剪文件保留版权；仅更改 require 路径指向本地 AppConfig.cjs。未复制 AGPL 主应用的实现、未使用可选 Pro 模块。上游主应用仅作调研参考，不包含在本仓库或应用中。
 
-应用图标由本项目脚本绘制，不使用 Eagle 图标。完整第三方授权条款随对应文件保留。尚未确认本项目公开范围，项目自身源码暂标 UNLICENSED。
+应用图标由本项目脚本绘制，不使用 Eagle 图标。完整第三方授权条款随对应文件保留。本项目已公开源码，项目自身授权条款尚未确定，暂标 UNLICENSED。
