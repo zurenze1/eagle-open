@@ -2,7 +2,7 @@ const {_electron}=require('playwright-core');
 const fs=require('node:fs/promises');
 const path=require('node:path');
 const assert=require('node:assert/strict');
-const verification=path.resolve(__dirname,'../../verification'),binary=path.resolve(__dirname,'../../dist/Eagle 开源.app/Contents/MacOS/Eagle Open');
+const verification=path.resolve(__dirname,'../../verification'),binary=process.env.EAGLE_OPEN_TEST_BINARY||path.resolve(__dirname,'../../dist/Eagle 开源.app/Contents/MacOS/Eagle Open');
 (async()=>{
   const data=await fs.mkdtemp(path.join(verification,'packaged-')),env={...process.env,EAGLE_OPEN_DATA:data,EAGLE_OPEN_NO_SOURCE:'1'};delete env.ELECTRON_RUN_AS_NODE;
   const report={binary,checks:[],passed:false};let app;

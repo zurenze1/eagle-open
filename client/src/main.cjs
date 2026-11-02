@@ -50,14 +50,14 @@ function registerIPC() {
   const handle = (name, fn) => ipcMain.handle(name, async (event,...args) => {
     const main=event.sender===win?.webContents&&event.senderFrame?.url==='app://ui/index.html';
     const panel=event.sender===collector?.window.webContents&&event.senderFrame?.url==='app://ui/collector.html';
-    const panelAllowed=['collector-state','collector-close','collector-main','collector-hover','collector-working','drop-import','import-bytes','capture-media'];
+    const panelAllowed=['collector-state','collector-close','collector-main','collector-hover','collector-working','collector-folder','collector-editing','collector-hold','collector-assign','create-folder','drop-import','import-bytes','capture-media'];
     if(!main&&!(panel&&panelAllowed.includes(name)))throw new Error('拒绝不可信页面调用');
     const result=await fn(...args);
-    if(panel&&['drop-import','import-bytes','capture-media'].includes(name)&&win&&!win.isDestroyed())win.webContents.send('library-changed');
+    if(panel&&['drop-import','import-bytes','capture-media','create-folder','collector-assign'].includes(name)&&win&&!win.isDestroyed())win.webContents.send('library-changed');
     return result;
   });
   handle('summary', () => library.summary());
-  handle('query', args => {collectorFolder=args?.folderId||null;collector?.update();return library.query(args);});
+  handle('query', args => {if(!collector?.window.isVisible())collectorFolder=args?.folderId||null;collector?.update();return library.query(args);});
   handle('item', id => library.publicItem(library.get(id)));
   handle('edit', (ids, patch) => library.edit(ids, patch));
   handle('create-folder', (name,parent) => library.createFolder(name,parent));
@@ -106,6 +106,10 @@ function registerIPC() {
   handle('collector-close',()=>collector.dismiss());
   handle('collector-hover',value=>collector.hover(value));
   handle('collector-working',(value,failed)=>collector.working(value,failed));
+  handle('collector-editing',value=>collector.editing(value));
+  handle('collector-hold',()=>collector.hold());
+  handle('collector-assign',async(ids,folder)=>{if(!Array.isArray(ids)||!ids.length||ids.length>1000)throw new Error('请选择当前收集的素材');for(const id of ids){const item=library.get(id);if(item.source!=='local')throw new Error('此入口仅整理新导入的独立素材');await library.edit([id],{folders:[...new Set([...item.folders,folder])]});}});
+  handle('collector-folder',id=>{if(id!==null&&!library.folders().some(f=>f.id===id))throw new Error('文件夹已不存在，请重新选择');collectorFolder=id;collector.update();return id;});
   handle('collector-main',()=>{collector.hide();if(win.isMinimized())win.restore();win.show();win.focus();});
   handle('open-url', url => shell.openExternal(webURL(url)));
   handle('reveal', async id => { const file = await library.assetPath(id,'original'); shell.showItemInFolder(file); });
@@ -140,6 +144,7 @@ else {
   app.on('before-quit',event=>{
     if(quitting)return;event.preventDefault();if(quitPending)return;quitPending=true;
     Promise.all([win,collector?.window].filter(w=>w&&!w.isDestroyed()).map(w=>w.webContents.executeJavaScript('window.flushPendingEdits ? window.flushPendingEdits() : Promise.resolve()')))
+      .then(()=>library?.queue)
       .then(()=>{quitting=true;collector?.dispose();app.quit();})
       .catch(error=>{quitPending=false;dialog.showErrorBox('更改尚未保存',error.message);});
   });
@@ -173,7 +178,7 @@ else {
     ]));
     app.setAboutPanelOptions({ applicationName:'Eagle 开源', applicationVersion:app.getVersion(), copyright:'独立素材客户端 · Electron / Fuse.js / TagSpaces MIT modules / Lucide' });
     await createWindow();
-    collector=createCollector({mainWindow:()=>win,folder:()=>({id:collectorFolder,name:library.folders().find(f=>f.id===collectorFolder)?.name||'素材库'}),autoEnabled:()=>library.state.preferences.collectorAuto!==false,onError:message=>console.error('自动收集框不可用：'+message)});
+    collector=createCollector({mainWindow:()=>win,folder:()=>({id:collectorFolder,name:library.folders().find(f=>f.id===collectorFolder)?.name||'素材库',folders:library.folders()}),autoEnabled:()=>library.state.preferences.collectorAuto!==false,onError:message=>console.error('自动收集框不可用：'+message)});
     app.on('activate', () => { if(win&&!win.isDestroyed()){win.show();win.focus();}else createWindow(); });
   }).catch(error => { dialog.showErrorBox('Eagle 开源启动失败', error.message); app.quit(); });
   app.on('window-all-closed', () => app.quit());
