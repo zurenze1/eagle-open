@@ -1,5 +1,6 @@
 client/node_modules/
 client/workspace.json
+client/assets/drag-watch
 data/
 verification/
 build/

@@ -19,6 +19,7 @@ function toast(message, error = false, persistent = false) {
 }
 async function attempt(fn) { try { return await fn(); } catch(e) { toast(e.message || String(e),true); } }
 const selectedItems = () => state.items.filter(i => state.selected.has(i.id));
+api.onLibraryChanged(()=>attempt(async()=>{await summary();await load();renderInspector();}));
 const title = () => state.smartId ? state.summary.smartFolders.find(f=>f.id===state.smartId)?.name || '智能文件夹' : state.folderId ? state.summary.folders.find(f => f.id===state.folderId)?.name || '文件夹' : ({all:'全部素材',local:'我的导入',unfiled:'未分类',untagged:'未标签',recent:'最近使用',random:'随机模式',trash:'回收站',tags:'标签管理'}[state.view] || '全部素材');
 async function summary() {
   state.summary = await api.summary();
@@ -139,6 +140,7 @@ function renderInspector() {
   icons();
 }
 window.flushPendingEdits=async()=>{
+  if(state.busy){toast('正在保存导入任务，完成后自动关闭…',false,true);await importQueue;}
   const id=$('#inspector').dataset.itemId;
   if(!id)return;
   const item=await api.item(id),patch={},name=$('#item-name')?.value,annotation=$('#annotation')?.value,url=$('#item-url')?.value;
@@ -185,19 +187,21 @@ async function showPreview(id) {
 function closePreview(){ $('#preview-dialog').close();$('#preview-body').replaceChildren(); }
 async function stepPreview(delta){const index=state.items.findIndex(i=>i.id===state.active),next=state.items[index+delta];if(next)await showPreview(next.id);}
 async function runImport(type='files') {
-  if(state.busy)return;state.busy=true;setImportBusy(true);
-  try {const result=await api.chooseImport(type,state.folderId);if(result)await finishImport(result);else $('#toast').classList.add('hidden');}
-  finally {state.busy=false;setImportBusy(false);}
+  if(state.busy)return;const folder=state.folderId;
+  return enqueueImport(async()=>{const result=await api.chooseImport(type,folder);if(result)await finishImport(result);else $('#toast').classList.add('hidden');});
 }
 function setImportBusy(busy){ $('#import').disabled=busy;$('#import-folder').disabled=busy;$('#capture').disabled=busy; }
-async function importDrop(event,folder=state.folderId){
-  if(state.busy)return;
-  // The DataTransfer store is readable only during this event; capture all fields before await.
-  const paths=[...event.dataTransfer.files].map(file=>api.filePath(file)).filter(Boolean);
-  const media=window.readMediaDrop(event.dataTransfer);
-  if(!paths.length&&!media.length){toast('未识别到文件或可下载的媒体链接；可先保存文件再导入',true);return;}
+let importQueue=Promise.resolve(),pendingImports=0;
+function enqueueImport(task){
+  pendingImports++;if(pendingImports>1)toast(`已排队，还有 ${pendingImports-1} 批素材等待导入`,false,true);
   state.busy=true;setImportBusy(true);
-  try {await finishImport(paths.length?await api.dropImport(paths,folder):await api.captureMedia(media,folder));}finally{state.busy=false;setImportBusy(false);}
+  const operation=importQueue.then(task).finally(()=>{pendingImports--;state.busy=pendingImports>0;setImportBusy(state.busy);});
+  importQueue=operation.catch(()=>{});return operation;
+}
+async function importDrop(event,folder=state.folderId){
+  const job=window.mediaDropJob(event.dataTransfer,api,folder);
+  if(!job){toast('未识别到文件或可下载的媒体链接；可先保存文件再导入',true);return;}
+  return enqueueImport(async()=>finishImport(await job()));
 }
 async function finishImport(result){
   await summary();await load();renderInspector();
@@ -205,7 +209,7 @@ async function finishImport(result){
   if(result.skipped.length){$('#import-details').innerHTML=result.skipped.map(x=>`<p><strong>${esc(x.name)}</strong><br>${esc(x.reason)}</p>`).join('');$('#import-report').showModal();}
 }
 $('#capture').onclick=()=>{ $('#capture-urls').value='';$('#capture-source').value='';$('#capture-folder').innerHTML='<option value="">素材库根目录</option>'+folderOptions(state.folderId);$('#capture-dialog').showModal();$('#capture-urls').focus(); };
-$('#capture-form').onsubmit=event=>{event.preventDefault();if(state.busy)return;const sourceURL=$('#capture-source').value.trim(),items=$('#capture-urls').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean).map(url=>({url,...(sourceURL?{sourceURL}:{})})),folder=$('#capture-folder').value||null;$('#capture-dialog').close();attempt(async()=>{state.busy=true;setImportBusy(true);try{await finishImport(await api.captureMedia(items,folder));}finally{state.busy=false;setImportBusy(false);}});};
+$('#capture-form').onsubmit=event=>{event.preventDefault();if(state.busy)return;const sourceURL=$('#capture-source').value.trim(),items=$('#capture-urls').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean).map(url=>({url,...(sourceURL?{sourceURL}:{})})),folder=$('#capture-folder').value||null;$('#capture-dialog').close();attempt(()=>enqueueImport(async()=>finishImport(await api.captureMedia(items,folder))));};
 $('#import').onclick=()=>attempt(()=>runImport());$('#import-folder').onclick=()=>attempt(()=>runImport('folder'));$('#empty-import').onclick=()=>attempt(()=>runImport());
 $('#new-folder').onclick=newFolder;$('#folder-filter').oninput=renderFolders;
 $('#folder-form').onsubmit=e=>{e.preventDefault();attempt(async()=>{const id=editingFolder;if(id)await api.editFolder(id,$('#folder-name').value,$('#folder-parent').value||null);const folder=id?{id}:await api.createFolder($('#folder-name').value,$('#folder-parent').value||null);$('#folder-dialog').close();await summary();await navigate('folder',folder.id);toast(id?'文件夹已保存':'文件夹已创建');});};
@@ -245,8 +249,8 @@ document.addEventListener('keydown',event=>{
   }
 });
 let dragDepth=0;
-document.addEventListener('dragenter',e=>{if([...e.dataTransfer.types].some(t=>['Files','text/uri-list','text/plain','text/html','DownloadURL'].includes(t))){e.preventDefault();dragDepth++;$('#drop-overlay').classList.remove('hidden');}});
-document.addEventListener('dragleave',()=>{dragDepth--;if(dragDepth<=0){dragDepth=0;$('#drop-overlay').classList.add('hidden');}});
+document.addEventListener('dragenter',e=>{if([...e.dataTransfer.types].some(t=>['Files','text/uri-list','text/plain','text/html','text/x-moz-url','DownloadURL'].includes(t))){e.preventDefault();$('#drop-overlay').classList.remove('hidden');}});
+document.addEventListener('dragleave',e=>{if(!e.relatedTarget&&(e.clientX<=0||e.clientY<=0||e.clientX>=innerWidth||e.clientY>=innerHeight))clearDrag();});
 document.addEventListener('dragover',e=>{e.preventDefault();e.dataTransfer.dropEffect='copy';});
 const clearDrag=()=>{dragDepth=0;$('#drop-overlay').classList.add('hidden');};
 document.addEventListener('dragend',clearDrag);

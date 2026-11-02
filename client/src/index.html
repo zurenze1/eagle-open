@@ -6,7 +6,7 @@
   <title>Eagle 开源</title><link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="titlebar"><span class="app-title">Eagle 开源 <span>素材管理 · 0.2</span></span><span class="privacy"><i data-lucide="hard-drive"></i>本地素材库</span></div>
+  <div class="titlebar"><span class="app-title">Eagle 开源 <span>素材管理 · 0.3</span></span><span class="privacy"><i data-lucide="hard-drive"></i>本地素材库</span></div>
   <div class="workspace">
     <aside class="sidebar">
       <div class="library-heading"><div class="library-icon"><i data-lucide="archive"></i></div><div><strong>我的素材库</strong><small id="library-subtitle">正在读取…</small></div><button id="connect" class="icon-button" title="只读接入 Eagle 库" aria-label="只读接入 Eagle 库"><i data-lucide="plug"></i></button></div>
@@ -30,11 +30,11 @@
   </div>
   <div id="drop-overlay" class="drop-overlay hidden"><i data-lucide="download"></i><h2>松开，收进素材库</h2><p>复制保存原文件 · 自动生成预览</p></div>
   <div id="toast" class="toast hidden" role="status"></div>
-  <dialog id="capture-dialog"><form id="capture-form"><h2>从链接采集</h2><p>粘贴图片、音频或视频文件的直接下载地址，每行一条。在浏览器中右键图片，可复制图片地址后粘贴到这里。</p><label>媒体链接<textarea id="capture-urls" required rows="5" placeholder="https://…/image.jpg&#10;https://…/music.mp3" aria-label="媒体链接"></textarea></label><label>来源网页（可选）<input id="capture-source" type="url" placeholder="https://…" aria-label="来源网页"></label><label>保存到<select id="capture-folder"></select></label><p>播放器网页、需登录的链接和流媒体播放列表暂不支持。单个文件上限 512 MB。</p><div class="dialog-actions"><button type="button" class="secondary" data-close="capture-dialog">取消</button><button type="submit" class="primary">开始采集</button></div></form></dialog>
+  <dialog id="capture-dialog"><form id="capture-form"><h2>从链接采集</h2><p>粘贴图片、音频或视频文件链接，每行一条；有明确公开音频的网页也可采集。在浏览器中右键图片，可复制图片地址后粘贴到这里。</p><label>媒体链接<textarea id="capture-urls" required rows="5" placeholder="https://…/image.jpg&#10;https://…/music.mp3" aria-label="媒体链接"></textarea></label><label>来源网页（可选）<input id="capture-source" type="url" placeholder="https://…" aria-label="来源网页"></label><label>保存到<select id="capture-folder"></select></label><p>需登录的链接与流媒体播放列表暂不支持。单个文件上限 512 MB。</p><div class="dialog-actions"><button type="button" class="secondary" data-close="capture-dialog">取消</button><button type="submit" class="primary">开始采集</button></div></form></dialog>
   <dialog id="import-report"><h2>导入提示</h2><div id="import-details"></div><div class="dialog-actions"><button class="primary" data-close="import-report">知道了</button></div></dialog>
   <dialog id="smart-dialog"><form id="smart-form"><h2>新建智能文件夹</h2><p>自动收录符合当前关键词、类型、标签、星级和尺寸筛选的素材；以后新增素材也会自动匹配。</p><label>名称<input id="smart-name" required maxlength="200" aria-label="智能文件夹名称"></label><div class="dialog-actions"><button type="button" class="secondary" data-close="smart-dialog">取消</button><button class="primary" type="submit">保存智能文件夹</button></div></form></dialog>
   <dialog id="folder-dialog"><form id="folder-form"><h2>新建文件夹</h2><label>名称<input id="folder-name" required maxlength="200" placeholder="例如：人物故事参考"></label><label>上级文件夹<select id="folder-parent"></select></label><div class="dialog-actions"><button type="button" class="secondary" data-close="folder-dialog">取消</button><button class="primary" type="submit">创建文件夹</button></div></form></dialog>
   <dialog id="assign-dialog"><form id="assign-form"><h2>整理到文件夹</h2><p>可以同时加入多个分类</p><div id="assign-folders" class="assign-folders"></div><div class="dialog-actions"><button type="button" class="secondary" data-close="assign-dialog">取消</button><button class="primary" type="submit">保存分类</button></div></form></dialog>
   <dialog id="preview-dialog" class="preview-dialog"><div class="preview-header"><span id="preview-name"></span><div><button id="preview-prev" class="icon-button" title="上一个" aria-label="上一个"><i data-lucide="chevron-left"></i></button><button id="preview-next" class="icon-button" title="下一个" aria-label="下一个"><i data-lucide="chevron-right"></i></button><button id="preview-close" class="icon-button" title="关闭预览 Esc" aria-label="关闭预览"><i data-lucide="x"></i></button></div></div><div id="preview-body"></div><div class="preview-footer"><span id="preview-info"></span><span>← → 切换 · Esc 关闭</span></div></dialog>
-  <script src="vendor/lucide.js"></script><script src="drop.js"></script><script src="renderer.js"></script>
+  <script src="vendor/lucide.js"></script><script src="drop.js"></script><script src="drop-import.js"></script><script src="renderer.js"></script>
 </body></html>

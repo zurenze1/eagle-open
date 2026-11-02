@@ -1,6 +1,6 @@
 {
   "name": "eagle-open",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "独立 macOS 素材管理客户端，原 Eagle 库只读接入",
   "main": "src/main.cjs",
   "directories": {
@@ -11,13 +11,18 @@
     "test": "node --test test/library.test.cjs test/capture.test.cjs",
     "test:ui": "node scripts/make-fixtures.cjs && node test/electron.test.cjs",
     "package": "node scripts/package.cjs",
-    "test:capture": "node test/capture-ui.test.cjs"
+    "test:capture": "node test/capture-ui.test.cjs",
+    "test:web-drop": "node test/web-drop.test.cjs",
+    "prestart": "node scripts/build-native.cjs",
+    "prepackage": "node scripts/build-native.cjs",
+    "test:collector": "node scripts/build-native.cjs && node test/collector.test.cjs"
   },
   "keywords": [],
   "author": "祖仁泽",
   "license": "UNLICENSED",
   "type": "commonjs",
   "dependencies": {
+    "cheerio": "1.2.0",
     "file-type": "22.3.0",
     "fuse.js": "7.1.0"
   },

@@ -312,7 +312,7 @@ class Library {
           if (await hashFile(filePath) !== hash) throw new Error(`复制校验失败：${path.basename(file)}`);
           const item = { id, name: path.basename(file, path.extname(file)), ext, kind: kindOf(ext), size: stat.size,
             createdAt: Date.now(), modifiedAt: Date.now(), tags: [], folders: parent ? [parent] : [], annotation: '',
-            source: 'local', sourceName: '独立素材库', filePath, itemRoot, hash, width: 0, height: 0, duration: 0,
+            source: 'local', sourceName: metadata.sourceName || '独立素材库', filePath, itemRoot, hash, width: 0, height: 0, duration: 0,
             ...(metadata.url ? { url: metadata.url, downloadURL: metadata.downloadURL, resolvedURL: metadata.resolvedURL, sourceName: metadata.sourceName, urls: [metadata.url] } : {}) };
           try { Object.assign(item, await this.thumbnailer(item) || {}); }
           catch { skipped.push({ name: path.basename(file), reason: '文件已导入，缩略图未生成' }); }
@@ -325,6 +325,7 @@ class Library {
   }
   savePreferences(values) {
     return this.transact(async () => {
+      if(typeof values.collectorAuto==='boolean')this.state.preferences.collectorAuto=values.collectorAuto;
       if (Number.isFinite(values.thumbSize)) this.state.preferences.thumbSize = Math.max(110, Math.min(280, values.thumbSize));
       if (['newest','oldest','name','size','rating'].includes(values.sort)) this.state.preferences.sort = values.sort;
       if (['grid','masonry','list'].includes(values.layout)) this.state.preferences.layout = values.layout;

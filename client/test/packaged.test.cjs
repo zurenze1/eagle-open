@@ -7,7 +7,7 @@ const verification=path.resolve(__dirname,'../../verification'),binary=path.reso
   const data=await fs.mkdtemp(path.join(verification,'packaged-')),env={...process.env,EAGLE_OPEN_DATA:data,EAGLE_OPEN_NO_SOURCE:'1'};delete env.ELECTRON_RUN_AS_NODE;
   const report={binary,checks:[],passed:false};let app;
   try{
-    app=await _electron.launch({executablePath:binary,args:[],env});let page=await app.firstWindow();await page.locator('#library-subtitle').filter({hasText:'份素材'}).waitFor();
+    app=await _electron.launch({executablePath:binary,args:[],env});let page=await app.firstWindow();await page.locator('#library-subtitle').filter({hasText:'份素材'}).waitFor();await page.evaluate(()=>window.eagleOpen.preferences({collectorAuto:false}));await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().forEach(w=>w.hide()));
     const info=await app.evaluate(({app})=>({packaged:app.isPackaged,version:app.getVersion(),userData:app.getPath('userData')}));assert.equal(info.packaged,true);assert.equal(info.version,require('../package.json').version);report.info=info;report.checks.push('打包应用真实启动');
     const files=['图片预览测试.png','视频预览测试.mp4','音频预览测试.wav'].map(f=>path.join(verification,'fixtures',f));
     await app.evaluate(({dialog},filePaths)=>dialog.showOpenDialog=async()=>({canceled:false,filePaths}),files);await page.locator('#import').click();await page.locator('#toast').filter({hasText:'3 份新增'}).waitFor();assert.equal(await page.locator('.asset-card').count(),3);report.checks.push('成品真实导入三类文件');

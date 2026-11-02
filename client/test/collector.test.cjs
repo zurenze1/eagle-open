@@ -1,0 +1,41 @@
+const {_electron}=require('playwright-core');
+const fs=require('node:fs/promises'),path=require('node:path'),http=require('node:http'),assert=require('node:assert/strict');
+const {hashFile}=require('../src/library.cjs');
+const root=path.resolve(__dirname,'..'),verification=path.resolve(root,'../verification');
+const report={checks:[],errors:[],passed:false,scope:'Real collector window, imports, playback and persistence. OS hotkey and automatic drag detection checked separately.'};
+let app,server;
+(async()=>{
+  const sandbox=await fs.mkdtemp(path.join(verification,'collector-')),data=path.join(sandbox,'data');
+  const png=await fs.readFile(path.join(verification,'fixtures/图片预览测试.png')),wav=await fs.readFile(path.join(verification,'fixtures/音频预览测试.wav'));
+  server=http.createServer((req,res)=>{if(req.url==='/image'){res.setHeader('Content-Type','image/png');res.end(png);}else if(req.url==='/audio'){res.setHeader('Content-Type','audio/wav');res.end(wav);}else{res.setHeader('Content-Type','text/html');res.end('<h1>Login required</h1>');}});
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin='http://127.0.0.1:'+server.address().port;
+  const env={...process.env,EAGLE_OPEN_DATA:data,EAGLE_OPEN_NO_SOURCE:'1'};delete env.ELECTRON_RUN_AS_NODE;
+  // The collector can exist before or after the first renderer is ready.
+  const start=async()=>{app=await _electron.launch({executablePath:process.env.EAGLE_OPEN_TEST_BINARY||require('electron'),args:process.env.EAGLE_OPEN_TEST_BINARY?[]:[root],env});const main=await app.firstWindow();await main.locator('#library-subtitle').filter({hasText:'份素材'}).waitFor();await main.waitForFunction(()=>window.eagleOpen);for(let i=0;i<100&&!app.windows().some(p=>p.url().includes('collector.html'));i++)await new Promise(r=>setTimeout(r,20));return main;};
+  let main=await start(),panel=app.windows().find(p=>p.url().includes('collector.html'));assert.ok(panel);panel.on('pageerror',e=>report.errors.push(e.message));await panel.locator('#collector-box').waitFor();
+  // Isolate the automated UI from any simultaneous physical acceptance gesture.
+  await main.evaluate(()=>window.eagleOpen.preferences({collectorAuto:false}));
+  await app.evaluate(({BrowserWindow,screen})=>{screen.getDisplayNearestPoint=()=>({workArea:{x:-6000,y:-6000,width:1512,height:884}});for(const w of BrowserWindow.getAllWindows()){w.setFocusable(false);w.setPosition(-5000,-5000);}});
+  const menu=async label=>app.evaluate(({Menu},label)=>{const item=Menu.getApplicationMenu().items.find(i=>i.label==='显示').submenu.items.find(i=>i.label===label);return item.click(item);},label);
+  const check=name=>{report.checks.push(name);console.log('PASS',name);};
+  await main.locator('#new-folder').click();await main.locator('#folder-name').fill('快捷采集');await main.locator('#folder-form button[type=submit]').click();await main.locator('#view-title').filter({hasText:'快捷采集'}).waitFor();
+  await menu('快捷收集框');await panel.locator('#destination').filter({hasText:'快捷采集'}).waitFor();
+  const info=await panel.evaluate(()=>window.collector.state());assert.ok(info.shortcut);report.shortcut=info.shortcut;
+  const flags=await app.evaluate(({BrowserWindow})=>{const w=BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('collector.html'));return {top:w.isAlwaysOnTop(),focus:w.isFocused(),visible:w.isVisible(),bounds:w.getBounds()};});assert.equal(flags.top,true);assert.equal(flags.focus,false);assert.equal(flags.visible,true);report.window=flags;check('收集小框独立置顶、不抢焦点，使用主窗口当前分类且快捷键已注册');
+  await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('index.html')).close());await main.waitForFunction(()=>true);
+  assert.equal(await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('index.html')).isVisible()),false);check('关闭主窗口后继续保留收集框与后台采集能力');
+  const drop=async fields=>{await panel.locator('#status').evaluate(el=>el.textContent='等待');const t=await panel.evaluateHandle(fields=>{const d=new DataTransfer();for(const[k,v]of Object.entries(fields))d.setData(k,v);return d;},fields);await panel.dispatchEvent('#drop-target','drop',{dataTransfer:t});await t.dispose();await panel.locator('#status').filter({hasText:/已收集|未能收集|失败/}).waitFor();};
+  await drop({'text/html':`<a href="${origin}/article"><img src="${origin}/image" alt="收集图片"></a>`});
+  await drop({'DownloadURL':`audio/wav:收集音乐.wav:${origin}/audio`});
+  let saved=JSON.parse(await fs.readFile(path.join(data,'library.json'),'utf8'));assert.equal(saved.items.length,2);
+  for(const i of saved.items){assert.equal(i.hash,await hashFile(i.filePath));assert.deepEqual(i.folders,[info.folderId]);}assert.equal(saved.items.find(i=>i.kind==='image').url,origin+'/article');check('主窗口隐藏时小框真实保存图片和音频，哈希、来源与分类正确');
+  await drop({'text/plain':origin+'/audio'});saved=JSON.parse(await fs.readFile(path.join(data,'library.json'),'utf8'));assert.equal(saved.items.length,2);assert.match(await panel.locator('#hint').textContent(),/重复/);check('收集框重复导入不产生副本并显示结果');
+  await drop({'text/plain':origin+'/login'});assert.match(await panel.locator('#hint').textContent(),/没有可直接下载/);assert.equal(JSON.parse(await fs.readFile(path.join(data,'library.json'),'utf8')).items.length,2);check('无法下载的网页在小框显示原因，不产生伪媒体');
+  assert.equal(await panel.evaluate(()=>typeof window.collector.edit),'undefined');assert.equal(await panel.evaluate(()=>typeof window.require),'undefined');check('小框只有采集桥接，保留 Node 隔离及主界面修改权限边界');
+  await panel.screenshot({path:path.join(verification,'collector-error.png')});
+  await drop({'text/plain':origin+'/image'});await panel.screenshot({path:path.join(verification,'collector-window.png')});
+  await panel.locator('#open-main').click();await main.locator('.asset-card').filter({hasText:'收集音乐'}).dblclick();await main.waitForFunction(()=>document.querySelector('audio')?.readyState>=2);await main.evaluate(async()=>{const a=document.querySelector('audio');a.muted=true;await a.play();});await main.waitForFunction(()=>document.querySelector('audio').currentTime>.15);await main.locator('#preview-close').click();check('打开素材库后采集结果立即显示，音乐能实际播放');
+  await main.evaluate(()=>window.eagleOpen.preferences({collectorAuto:false}));await app.close();app=null;
+  main=await start();panel=app.windows().find(p=>p.url().includes('collector.html'));await panel.locator('#collector-box').waitFor();const reopened=await panel.evaluate(()=>window.collector.state());assert.equal(reopened.autoEnabled,false);assert.equal(await main.locator('.asset-card').count(),2);check('退出重启后采集原件、分类和自动弹出开关保持');
+  assert.deepEqual(report.errors,[]);report.passed=true;report.sandbox=sandbox;
+})().catch(e=>{report.error=e.stack;console.error(e);process.exitCode=1;}).finally(async()=>{if(app)await app.close().catch(()=>{});if(server){server.closeAllConnections();await new Promise(r=>server.close(r));}await fs.writeFile(path.join(verification,'collector-report.json'),JSON.stringify(report,null,2));});

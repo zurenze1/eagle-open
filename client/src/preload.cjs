@@ -9,9 +9,11 @@ contextBridge.exposeInMainWorld('eagleOpen', {
   preferences: values => ipcRenderer.invoke('preferences',values), refresh: () => ipcRenderer.invoke('refresh'),
   connectSource: () => ipcRenderer.invoke('connect-source'),
   chooseImport: (type,folder) => ipcRenderer.invoke('choose-import',type,folder),
-  dropImport: (paths,folder) => ipcRenderer.invoke('drop-import',paths,folder), filePath: file => webUtils.getPathForFile(file),
+  dropImport: (paths,folder,source) => ipcRenderer.invoke('drop-import',paths,folder,source), filePath: file => webUtils.getPathForFile(file),
+  importBytes: (input,folder) => ipcRenderer.invoke('import-bytes',input,folder),
   captureMedia: (items,folder) => ipcRenderer.invoke('capture-media',items,folder), openURL: url => ipcRenderer.invoke('open-url',url),
   reveal: id => ipcRenderer.invoke('reveal',id), openFile: id => ipcRenderer.invoke('open-file',id),
   onProgress: fn => ipcRenderer.on('import-progress',(_e,data) => fn(data)),
   onMenu: fn => ipcRenderer.on('menu-action',(_e,action) => fn(action)),
+  onLibraryChanged:fn=>ipcRenderer.on('library-changed',()=>fn()),
 });

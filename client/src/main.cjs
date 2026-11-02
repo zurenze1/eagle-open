@@ -6,7 +6,8 @@ const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { Library, safeFile, inside } = require('./library.cjs');
 const { mediaResponse } = require('./media.cjs');
-const { captureMedia, webURL } = require('./capture.cjs');
+const { captureMedia, importMediaBytes, sourceMetadata, webURL } = require('./capture.cjs');
+const { createCollector } = require('./collector.cjs');
 const run = promisify(execFile);
 app.setName('Eagle 开源');
 const projectRoot = app.isPackaged ? require('../workspace.json').projectRoot : path.resolve(__dirname, '../..');
@@ -16,7 +17,8 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true } },
   { scheme: 'asset', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } },
 ]);
-let win, library;
+let win, library, collector, collectorFolder=null, quitting=false,quitPending=false;
+const send=(name,value)=>{for(const window of [win,collector?.window])if(window&&!window.isDestroyed())window.webContents.send(name,value);};
 const ffmpeg = process.env.FFMPEG_PATH || 'ffmpeg';
 const ffprobe = process.env.FFPROBE_PATH || 'ffprobe';
 async function thumbnailer(item) {
@@ -46,11 +48,16 @@ async function thumbnailer(item) {
 }
 function registerIPC() {
   const handle = (name, fn) => ipcMain.handle(name, async (event,...args) => {
-    if (event.sender !== win?.webContents || event.senderFrame?.url !== 'app://ui/index.html') throw new Error('拒绝不可信页面调用');
-    return fn(...args);
+    const main=event.sender===win?.webContents&&event.senderFrame?.url==='app://ui/index.html';
+    const panel=event.sender===collector?.window.webContents&&event.senderFrame?.url==='app://ui/collector.html';
+    const panelAllowed=['collector-state','collector-close','collector-main','collector-hover','collector-working','drop-import','import-bytes','capture-media'];
+    if(!main&&!(panel&&panelAllowed.includes(name)))throw new Error('拒绝不可信页面调用');
+    const result=await fn(...args);
+    if(panel&&['drop-import','import-bytes','capture-media'].includes(name)&&win&&!win.isDestroyed())win.webContents.send('library-changed');
+    return result;
   });
   handle('summary', () => library.summary());
-  handle('query', args => library.query(args));
+  handle('query', args => {collectorFolder=args?.folderId||null;collector?.update();return library.query(args);});
   handle('item', id => library.publicItem(library.get(id)));
   handle('edit', (ids, patch) => library.edit(ids, patch));
   handle('create-folder', (name,parent) => library.createFolder(name,parent));
@@ -83,13 +90,23 @@ function registerIPC() {
     if (!result.canceled) return library.connectSource(result.filePaths[0]);
     return null;
   });
-  const importFiles = (paths, folder) => library.importPaths(paths, folder, progress => win?.webContents.send('import-progress',progress));
+  const importFiles = async (paths, folder, source) => {
+    const metadata={};
+    if(source&&Array.isArray(paths)&&paths.length===1)metadata[await fs.realpath(paths[0])]=sourceMetadata(source);
+    return library.importPaths(paths, folder, progress => send('import-progress',progress),metadata);
+  };
   handle('choose-import', async (type, folder) => {
     const result = await dialog.showOpenDialog(win, { title: type === 'folder' ? '导入文件夹，保留层级' : '导入素材', properties: type === 'folder' ? ['openDirectory'] : ['openFile','multiSelections'] });
     return result.canceled ? null : importFiles(result.filePaths, folder);
   });
-  handle('drop-import', (paths,folder) => importFiles(paths,folder));
-  handle('capture-media', (items,folder) => captureMedia(library,items,folder,progress => win?.webContents.send('import-progress',progress)));
+  handle('drop-import', (paths,folder,source) => importFiles(paths,folder,source));
+  handle('import-bytes', (input,folder) => importMediaBytes(library,input,folder));
+  handle('capture-media', (items,folder) => captureMedia(library,items,folder,progress => send('import-progress',progress)));
+  handle('collector-state',()=>collector.info());
+  handle('collector-close',()=>collector.dismiss());
+  handle('collector-hover',value=>collector.hover(value));
+  handle('collector-working',(value,failed)=>collector.working(value,failed));
+  handle('collector-main',()=>{collector.hide();if(win.isMinimized())win.restore();win.show();win.focus();});
   handle('open-url', url => shell.openExternal(webURL(url)));
   handle('reveal', async id => { const file = await library.assetPath(id,'original'); shell.showItemInFolder(file); });
   handle('open-file', async id => {
@@ -108,19 +125,24 @@ async function createWindow() {
   win.webContents.on('will-navigate', e => e.preventDefault());
   win.webContents.session.setPermissionRequestHandler((_wc,_permission,callback) => callback(false));
   const window = win;
-  let closing = false;
   window.on('close', event => {
-    if (closing) return;
+    if (quitting) return;
     event.preventDefault();
-    // 关闭时把仍处于输入状态的名称与描述保存，再结束进程。
+    // Red close hides the library; the explicitly requested quick collector stays available.
     window.webContents.executeJavaScript('window.flushPendingEdits ? window.flushPendingEdits() : Promise.resolve()')
-      .then(() => { closing = true; window.close(); })
+      .then(() => window.hide())
       .catch(error => dialog.showErrorBox('更改尚未保存', error.message));
   });
   await win.loadURL('app://ui/index.html');
 }
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
+  app.on('before-quit',event=>{
+    if(quitting)return;event.preventDefault();if(quitPending)return;quitPending=true;
+    Promise.all([win,collector?.window].filter(w=>w&&!w.isDestroyed()).map(w=>w.webContents.executeJavaScript('window.flushPendingEdits ? window.flushPendingEdits() : Promise.resolve()')))
+      .then(()=>{quitting=true;collector?.dispose();app.quit();})
+      .catch(error=>{quitPending=false;dialog.showErrorBox('更改尚未保存',error.message);});
+  });
   app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); } });
   app.whenReady().then(async () => {
     library = await new Library(dataRoot, { thumbnailer }).init(process.env.EAGLE_OPEN_NO_SOURCE ? null : (process.env.EAGLE_OPEN_SOURCE || null));
@@ -146,12 +168,13 @@ else {
       { label: 'Eagle 开源', submenu: [{ role: 'about' },{ type: 'separator' },{ role: 'hide' },{ role: 'hideOthers' },{ type:'separator' },{ role:'quit' }] },
       { label: '文件', submenu: [{label:'导入素材…', accelerator:'CmdOrCtrl+I', click:()=>win?.webContents.send('menu-action','import')},{label:'新建文件夹…',accelerator:'CmdOrCtrl+Shift+N',click:()=>win?.webContents.send('menu-action','folder')},{type:'separator'},{label:'刷新原库',accelerator:'CmdOrCtrl+R',click:()=>win?.webContents.send('menu-action','refresh')},{role:'close'}] },
       { label: '编辑', submenu: [{role:'undo'},{role:'redo'},{type:'separator'},{role:'cut'},{role:'copy'},{role:'paste'},{role:'selectAll'}] },
-      { label: '显示', submenu: [{label:'搜索',accelerator:'CmdOrCtrl+F',click:()=>win?.webContents.send('menu-action','search')},{role:'togglefullscreen'}] },
+      { label: '显示', submenu: [{label:'搜索',accelerator:'CmdOrCtrl+F',click:()=>win?.webContents.send('menu-action','search')},{label:'快捷收集框',click:()=>collector?.show()},{label:'拖拽时自动显示收集框',type:'checkbox',checked:library.state.preferences.collectorAuto!==false,click:item=>library.savePreferences({collectorAuto:item.checked}).then(()=>collector?.update())},{role:'togglefullscreen'}] },
       { label:'窗口',submenu:[{role:'minimize'},{role:'zoom'},{role:'front'}] },
     ]));
     app.setAboutPanelOptions({ applicationName:'Eagle 开源', applicationVersion:app.getVersion(), copyright:'独立素材客户端 · Electron / Fuse.js / TagSpaces MIT modules / Lucide' });
     await createWindow();
-    app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+    collector=createCollector({mainWindow:()=>win,folder:()=>({id:collectorFolder,name:library.folders().find(f=>f.id===collectorFolder)?.name||'素材库'}),autoEnabled:()=>library.state.preferences.collectorAuto!==false,onError:message=>console.error('自动收集框不可用：'+message)});
+    app.on('activate', () => { if(win&&!win.isDestroyed()){win.show();win.focus();}else createWindow(); });
   }).catch(error => { dialog.showErrorBox('Eagle 开源启动失败', error.message); app.quit(); });
   app.on('window-all-closed', () => app.quit());
 }

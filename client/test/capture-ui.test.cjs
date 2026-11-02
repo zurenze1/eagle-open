@@ -18,7 +18,7 @@ const check = name => { report.checks.push(name); console.log('PASS',name); };
   });
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin='http://127.0.0.1:'+server.address().port;
   const env={...process.env,EAGLE_OPEN_DATA:data,EAGLE_OPEN_NO_SOURCE:'1'};delete env.ELECTRON_RUN_AS_NODE;
-  const launch=async()=>{const launched=await _electron.launch({executablePath:process.env.EAGLE_OPEN_TEST_BINARY||require('electron'),args:process.env.EAGLE_OPEN_TEST_BINARY?[]:[root],env});const page=await launched.firstWindow();page.on('pageerror',e=>report.errors.push(e.message));await page.locator('#library-subtitle').filter({hasText:'份素材'}).waitFor();return {launched,page};};
+  const launch=async()=>{const launched=await _electron.launch({executablePath:process.env.EAGLE_OPEN_TEST_BINARY||require('electron'),args:process.env.EAGLE_OPEN_TEST_BINARY?[]:[root],env});const page=await launched.firstWindow();page.on('pageerror',e=>report.errors.push(e.message));await page.locator('#library-subtitle').filter({hasText:'份素材'}).waitFor();await page.evaluate(()=>window.eagleOpen.preferences({collectorAuto:false}));await launched.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().forEach(w=>w.hide()));return {launched,page};};
   let session=await launch();app=session.launched;let page=session.page;
   await page.locator('#capture').click();await page.locator('#capture-urls').fill(['/image','/audio','/video'].map(s=>origin+s).join('\n'));await page.locator('#capture-source').fill(origin+'/article');await page.locator('#capture-form button[type=submit]').click();
   await page.locator('#toast').filter({hasText:'3 份新增'}).waitFor({timeout:30000});assert.equal(await page.locator('.asset-card').count(),3);

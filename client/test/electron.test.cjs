@@ -12,7 +12,7 @@ const launch=async(data,source=false,packaged=null)=>{
   if(!source)env.EAGLE_OPEN_NO_SOURCE='1';else delete env.EAGLE_OPEN_NO_SOURCE;
   const launched=await _electron.launch({executablePath:packaged||require('electron'),args:packaged?[]:[root],env,timeout:30000});
   const page=await launched.firstWindow();page.on('pageerror',error=>report.errors.push(error.message));
-  await page.locator('#library-subtitle').filter({hasText:/份素材/}).waitFor();return {application:launched,page};
+  await page.locator('#library-subtitle').filter({hasText:/份素材/}).waitFor();await page.evaluate(()=>window.eagleOpen.preferences({collectorAuto:false}));await launched.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().forEach(w=>w.hide()));return {application:launched,page};
 };
 async function main(){
   await fs.mkdir(verification,{recursive:true});const sandbox=await fs.mkdtemp(path.join(verification,'e2e-'));
