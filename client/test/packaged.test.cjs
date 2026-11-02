@@ -8,7 +8,7 @@ const verification=path.resolve(__dirname,'../../verification'),binary=path.reso
   const report={binary,checks:[],passed:false};let app;
   try{
     app=await _electron.launch({executablePath:binary,args:[],env});let page=await app.firstWindow();await page.locator('#library-subtitle').filter({hasText:'份素材'}).waitFor();
-    const info=await app.evaluate(({app})=>({packaged:app.isPackaged,version:app.getVersion(),userData:app.getPath('userData')}));assert.equal(info.packaged,true);assert.equal(info.version,'0.1.0');report.info=info;report.checks.push('打包应用真实启动');
+    const info=await app.evaluate(({app})=>({packaged:app.isPackaged,version:app.getVersion(),userData:app.getPath('userData')}));assert.equal(info.packaged,true);assert.equal(info.version,require('../package.json').version);report.info=info;report.checks.push('打包应用真实启动');
     const files=['图片预览测试.png','视频预览测试.mp4','音频预览测试.wav'].map(f=>path.join(verification,'fixtures',f));
     await app.evaluate(({dialog},filePaths)=>dialog.showOpenDialog=async()=>({canceled:false,filePaths}),files);await page.locator('#import').click();await page.locator('#toast').filter({hasText:'3 份新增'}).waitFor();assert.equal(await page.locator('.asset-card').count(),3);report.checks.push('成品真实导入三类文件');
     await page.locator('.asset-card').filter({hasText:'视频预览测试'}).dblclick();await page.waitForFunction(()=>{const v=document.querySelector('video');return v?.readyState>=2&&v.duration===3;},null,{polling:100});await page.evaluate(async()=>{const v=document.querySelector('video');v.muted=true;await v.play();});await page.waitForFunction(()=>document.querySelector('video').currentTime>.2,null,{polling:100});await page.locator('#preview-close').click();report.checks.push('成品视频实际播放');

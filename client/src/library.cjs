@@ -18,6 +18,13 @@ const cleanText = (value, max = 1000) => {
   if (typeof value !== 'string' || value.length > max) throw new Error('文字格式不正确或过长');
   return value.trim();
 };
+function filterItems(items, { text = '', kind = 'all', tag, minRating = 0, minWidth = 0, minHeight = 0, minSize = 0, maxSize = 0, minDuration = 0, maxDuration = 0, ext = '' } = {}) {
+  if (kind !== 'all') items = items.filter(i => i.kind === kind);
+  if (tag) items = filterByTags(items.map(i => ({ ...i, _tags: i.tags, tags: i.tags.map(title => ({ title: title.toLowerCase() })) })), { tagsAND: [{ title: tag }] }).map(({ _tags, ...i }) => ({ ...i, tags: _tags }));
+  items = items.filter(i => (i.rating || 0) >= minRating && (i.width || 0) >= minWidth && (i.height || 0) >= minHeight && i.size >= minSize && (!maxSize || i.size <= maxSize) && (i.duration || 0) >= minDuration && (!maxDuration || i.duration <= maxDuration) && (!ext || i.ext === ext.toLowerCase().replace(/^\./, '')));
+  if (text.trim()) items = new Fuse(items, { keys: [{ name: 'name', weight: 0.6 }, 'tags', 'annotation', 'url'], ignoreLocation: true, threshold: 0.25, minMatchCharLength: 1 }).search(text.trim()).map(r => r.item);
+  return items;
+}
 async function hashFile(file) {
   const handle = await fs.open(file, 'r');
   try {
@@ -63,6 +70,8 @@ class Library {
       }
     }
     if (this.state.version !== 1 || !Array.isArray(this.state.items) || !Array.isArray(this.state.sources)) throw new Error('不支持的独立库格式');
+    this.state.smartFolders ||= [];
+    this.state.folderOverlays ||= {};
     await this.refresh();
     return this;
   }
@@ -128,7 +137,7 @@ class Library {
             items.push({ id: prefix + m.id, name: m.name, ext, kind: kindOf(ext), size: Number(m.size) || 0,
               createdAt: Number(m.btime || m.mtime) || 0, modifiedAt: Number(m.modificationTime) || 0,
               tags: (m.tags || []).filter(t => typeof t === 'string'), folders: assigned.filter(f => visibleFolders.has(f)),
-              annotation: String(m.annotation || ''), url: String(m.url || ''), width: Number(m.width) || 0,
+              annotation: String(m.annotation || ''), url: String(m.url || ''), rating: Math.min(5, Math.max(0, Number(m.star) || 0)), width: Number(m.width) || 0,
               height: Number(m.height) || 0, duration: Number(m.duration) || 0, source: 'eagle', sourceName: source.name,
               filePath, thumbPath, itemRoot });
           } catch { invalid++; }
@@ -142,7 +151,7 @@ class Library {
   items() {
     return [...this.sourceItems, ...this.state.items].map(item => ({ ...item, ...this.state.overlays[item.id] }));
   }
-  folders() { return [...this.sourceFolders, ...this.state.folders]; }
+  folders() { return [...this.sourceFolders, ...this.state.folders].map(folder => ({ ...folder, ...this.state.folderOverlays[folder.id] })); }
   get(id) {
     const item = this.items().find(i => i.id === id);
     if (!item) throw new Error('素材不存在，请刷新素材库');
@@ -161,32 +170,33 @@ class Library {
       untagged: active.filter(i => !i.tags.length).length, trash: items.filter(i => i.deleted).length,
       folders: folders.map(f => { const ids = descendants(f.id); return { ...f, count: active.filter(i => i.folders.some(x => ids.has(x))).length }; }),
       tags: unique(active.flatMap(i => i.tags)).sort((a,b) => a.localeCompare(b, 'zh-CN')).map(name => ({ name, count: active.filter(i => i.tags.includes(name)).length })),
+      smartFolders: this.state.smartFolders.map(f => ({ ...f, count: filterItems(active, f.criteria).length })),
+      recent: active.filter(i => i.lastOpenedAt).length,
       sources: this.state.sources.map(({ id, name }) => ({ id, name })), preferences: this.state.preferences, warnings: this.warnings };
   }
-  async query({ view = 'all', folderId, tag, text = '', kind = 'all', sort = 'newest', offset = 0, limit = 100 } = {}) {
+  async query({ view = 'all', folderId, smartId, randomSeed = 0, sort = 'newest', offset = 0, limit = 100, ...criteria } = {}) {
     let items = this.items().filter(i => view === 'trash' ? i.deleted : !i.deleted);
     if (view === 'local') items = items.filter(i => i.source === 'local');
     if (view === 'unfiled') items = items.filter(i => !i.folders.length);
     if (view === 'untagged') items = items.filter(i => !i.tags.length);
+    if (view === 'recent') items = items.filter(i => i.lastOpenedAt);
+    if (smartId) {
+      const smart = this.state.smartFolders.find(f => f.id === smartId);
+      if (!smart) throw new Error('智能文件夹不存在');
+      items = filterItems(items, smart.criteria);
+    }
     if (folderId) {
       const ids = new Set([folderId]), folders = this.folders();
       let changed = true;
       while (changed) { changed = false; for (const f of folders) if (ids.has(f.parentId) && !ids.has(f.id)) { ids.add(f.id); changed = true; } }
       items = items.filter(i => i.folders.some(f => ids.has(f)));
     }
-    if (kind !== 'all') items = items.filter(i => i.kind === kind);
-    if (tag) {
-      // 复用 TagSpaces MIT 的标签筛选，按其大小写归一化约定传入索引。
-      items = filterByTags(items.map(i => ({ ...i, _tags: i.tags, tags: i.tags.map(title => ({ title: title.toLowerCase() })) })), { tagsAND: [{ title: tag }] })
-        .map(({ _tags, ...i }) => ({ ...i, tags: _tags }));
-    }
-    if (text.trim()) {
-      const fuse = new Fuse(items, { keys: [{ name: 'name', weight: 0.6 }, 'tags', 'annotation'], ignoreLocation: true, threshold: 0.25, minMatchCharLength: 1 });
-      items = fuse.search(text.trim()).map(r => r.item);
-    }
+    items = filterItems(items, criteria);
     const compare = { newest: (a,b) => b.createdAt - a.createdAt, oldest: (a,b) => a.createdAt - b.createdAt,
-      name: (a,b) => a.name.localeCompare(b.name, 'zh-CN', { numeric: true }), size: (a,b) => b.size - a.size }[sort];
+      name: (a,b) => a.name.localeCompare(b.name, 'zh-CN', { numeric: true }), size: (a,b) => b.size - a.size,
+      rating: (a,b) => (b.rating || 0) - (a.rating || 0), recent: (a,b) => (b.lastOpenedAt || 0) - (a.lastOpenedAt || 0) }[view === 'recent' ? 'recent' : sort];
     if (compare) items.sort(compare);
+    if (view === 'random') { const keys = new Map(items.map(i => [i.id, crypto.createHash('sha256').update(String(randomSeed) + i.id).digest('hex')])); items.sort((a,b) => keys.get(a.id).localeCompare(keys.get(b.id))); }
     const total = items.length;
     return { total, items: items.slice(Math.max(0,offset), Math.max(0,offset) + Math.min(200, Math.max(1,limit))).map(i => this.publicItem(i)) };
   }
@@ -201,6 +211,11 @@ class Library {
       const valid = {};
       if ('name' in patch) { valid.name = cleanText(patch.name, 500); if (!valid.name) throw new Error('名称不能为空'); }
       if ('annotation' in patch) valid.annotation = cleanText(patch.annotation, 50000);
+      if ('url' in patch) {
+        valid.url = cleanText(patch.url, 16384);
+        if (valid.url) { const url = new URL(valid.url); if (!['http:','https:'].includes(url.protocol) || url.username || url.password) throw new Error('来源仅支持 http 或 https 链接'); }
+      }
+      if ('rating' in patch) { if (!Number.isInteger(patch.rating) || patch.rating < 0 || patch.rating > 5) throw new Error('评分应为 0–5 星'); valid.rating = patch.rating; }
       if ('tags' in patch) { if (!Array.isArray(patch.tags) || patch.tags.length > 200) throw new Error('标签格式不正确'); valid.tags = unique(patch.tags.map(x => cleanText(x,100)).filter(Boolean)); }
       if ('folders' in patch) {
         const allowed = new Set(this.folders().map(f => f.id));
@@ -221,6 +236,32 @@ class Library {
       this.state.folders.push(folder); return folder;
     });
   }
+  editFolder(id, name, parentId) {
+    return this.transact(async () => {
+      const folders = this.folders(), folder = folders.find(f => f.id === id);
+      if (!folder) throw new Error('文件夹不存在');
+      name = cleanText(name, 200); if (!name) throw new Error('文件夹名称不能为空');
+      if (parentId && !folders.some(f => f.id === parentId)) throw new Error('上级文件夹不存在');
+      let ancestor = parentId;
+      while (ancestor) { if (ancestor === id) throw new Error('不能把文件夹放进自身或子文件夹'); ancestor = folders.find(f => f.id === ancestor)?.parentId; }
+      this.state.folderOverlays[id] = { name, parentId: parentId || null }; return this.summary();
+    });
+  }
+  createSmartFolder(name, criteria) {
+    return this.transact(async () => {
+      name = cleanText(name, 200); if (!name) throw new Error('请输入智能文件夹名称');
+      const allowed = {};
+      for (const key of ['text','kind','tag','ext']) if (criteria[key]) allowed[key] = cleanText(criteria[key], 500);
+      for (const key of ['minRating','minWidth','minHeight','minSize','maxSize','minDuration','maxDuration']) {
+        if (criteria[key] !== undefined) { const n = criteria[key]; if (!Number.isFinite(n) || n < 0) throw new Error('筛选数值不正确'); allowed[key] = n; }
+      }
+      const folder = { id: 'smart:' + crypto.randomUUID(), name, criteria: allowed };
+      this.state.smartFolders.push(folder); return folder;
+    });
+  }
+  recordOpen(id) {
+    return this.transact(async () => { this.get(id); this.state.overlays[id] = { ...this.state.overlays[id], lastOpenedAt: Date.now() }; });
+  }
   connectSource(sourcePath) {
     return this.transact(async () => {
       const root = await fs.realpath(sourcePath);
@@ -231,7 +272,7 @@ class Library {
       if (!this.state.sources.some(s => s.path === root)) this.state.sources.push({ id: crypto.randomUUID(), path: root, name: path.basename(root,'.library') });
     }).then(() => this.refresh());
   }
-  importPaths(inputPaths, folderId, onProgress = () => {}) {
+  importPaths(inputPaths, folderId, onProgress = () => {}, metadataByPath = {}) {
     return this.transact(async () => {
       if (!Array.isArray(inputPaths) || !inputPaths.length) throw new Error('请选择导入文件');
       if (folderId && !this.folders().some(f => f.id === folderId)) throw new Error('导入分类不存在');
@@ -255,9 +296,13 @@ class Library {
           const { file, parent, stat } = files[index];
           onProgress({ completed: index, total: files.length, name: path.basename(file) });
           const hash = await hashFile(file);
+          const metadata = metadataByPath[file] || {};
           if (hashes.has(hash)) {
             const existing = hashes.get(hash), current = this.get(existing.id);
-            if (parent && !current.folders.includes(parent)) this.state.overlays[existing.id] = { ...this.state.overlays[existing.id], folders: [...current.folders, parent] };
+            this.state.overlays[existing.id] = { ...this.state.overlays[existing.id],
+              ...(parent && !current.folders.includes(parent) ? { folders: [...current.folders, parent] } : {}),
+              ...(metadata.url ? { urls: unique([...(current.urls || []), current.url, metadata.url].filter(Boolean)),
+                ...(!current.url ? { url: metadata.url, downloadURL: metadata.downloadURL, resolvedURL: metadata.resolvedURL } : {}) } : {}) };
             duplicates.push({ id: existing.id, name: path.basename(file) }); continue;
           }
           const id = 'local:' + crypto.randomUUID(), itemRoot = path.join(this.root, 'assets', id.slice(6));
@@ -267,7 +312,8 @@ class Library {
           if (await hashFile(filePath) !== hash) throw new Error(`复制校验失败：${path.basename(file)}`);
           const item = { id, name: path.basename(file, path.extname(file)), ext, kind: kindOf(ext), size: stat.size,
             createdAt: Date.now(), modifiedAt: Date.now(), tags: [], folders: parent ? [parent] : [], annotation: '',
-            source: 'local', sourceName: '独立素材库', filePath, itemRoot, hash, width: 0, height: 0, duration: 0 };
+            source: 'local', sourceName: '独立素材库', filePath, itemRoot, hash, width: 0, height: 0, duration: 0,
+            ...(metadata.url ? { url: metadata.url, downloadURL: metadata.downloadURL, resolvedURL: metadata.resolvedURL, sourceName: metadata.sourceName, urls: [metadata.url] } : {}) };
           try { Object.assign(item, await this.thumbnailer(item) || {}); }
           catch { skipped.push({ name: path.basename(file), reason: '文件已导入，缩略图未生成' }); }
           this.state.items.push(item); hashes.set(hash, item); imported.push(this.publicItem(item));
@@ -280,7 +326,8 @@ class Library {
   savePreferences(values) {
     return this.transact(async () => {
       if (Number.isFinite(values.thumbSize)) this.state.preferences.thumbSize = Math.max(110, Math.min(280, values.thumbSize));
-      if (['newest','oldest','name','size'].includes(values.sort)) this.state.preferences.sort = values.sort;
+      if (['newest','oldest','name','size','rating'].includes(values.sort)) this.state.preferences.sort = values.sort;
+      if (['grid','masonry','list'].includes(values.layout)) this.state.preferences.layout = values.layout;
     });
   }
 }

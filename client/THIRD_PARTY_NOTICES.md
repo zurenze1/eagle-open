@@ -6,6 +6,7 @@
 |---|---|---|---|
 | Electron | 45.1.0 | macOS 窗口、沙盒、文件选择与预览协议 | MIT；https://github.com/electron/electron ，运行包保留 LICENSE 与 LICENSES.chromium.html |
 | Fuse.js | 7.1.0 | 素材名称、标签、描述文本搜索 | Apache-2.0；https://github.com/krisk/Fuse ，node_modules/fuse.js/LICENSE |
+| file-type | 22.3.0 | 按文件签名识别采集媒体类型，拒绝把 HTML 登录页当成图片 | MIT；https://github.com/sindresorhus/file-type ，node_modules/file-type/license |
 | TagSpaces common | 4.8.9 | paths.js 文件扩展名与路径解析；配套 AppConfig.js | MIT；https://github.com/tagspaces/tagspaces-common ；src/vendor/LICENSE-tagspaces-common |
 | TagSpaces search | 4.8.9 | filters.js 标签组合筛选 | MIT；同上模块仓库；src/vendor/LICENSE-tagspaces-search |
 | Lucide | 0.577.0 | 界面 SVG 图标 | ISC；https://github.com/lucide-icons/lucide ；src/vendor/LICENSE-lucide |

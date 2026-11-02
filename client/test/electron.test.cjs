@@ -77,7 +77,9 @@ async function main(){
   const metadataBefore=await Promise.all(sourceFiles.map(async f=>({path:f,hash:await hashFile(f)})));
   session=await launch(path.join(sandbox,'source-data'),true);application=session.application;page=session.page;
   const diskMeta=await Promise.all(sourceFiles.slice(1).map(async f=>JSON.parse(await fs.readFile(f,'utf8'))));
-  const diskActive=diskMeta.filter(m=>!m.isDeleted),diskTags=new Set(diskActive.flatMap(m=>m.tags||[]));
+  const activeMetadata=diskMeta.filter(m=>!m.isDeleted),diskActive=[];
+  for(const m of activeMetadata){const names=await fs.readdir(path.join(source,'images',m.id+'.info'));if(names.some(n=>n===m.name+'.'+m.ext||(!n.includes('_thumbnail.')&&n.endsWith('.'+m.ext))))diskActive.push(m);}
+  const diskTags=new Set(diskActive.flatMap(m=>m.tags||[]));report.missingOriginals=activeMetadata.length-diskActive.length;
   const sourceSummary=await page.evaluate(()=>window.eagleOpen.summary());assert.equal(sourceSummary.sourceCount,diskActive.length);assert.equal(sourceSummary.tags.length,diskTags.size);check(`真实 Eagle 库 ${sourceSummary.sourceCount} 素材 / ${sourceSummary.folders.length} 分类 / ${sourceSummary.tags.length} 标签读取`,{sourceSummary:{total:sourceSummary.total,folders:sourceSummary.folders.length,tags:sourceSummary.tags.length}});
   assert.equal(await page.locator('.asset-card').count(),100);
   await page.locator('.asset-card').first().click();const columns=await page.locator('#grid').evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(' ').filter(Boolean).length);

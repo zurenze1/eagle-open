@@ -4,8 +4,9 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
-const { Library, safeFile } = require('./library.cjs');
+const { Library, safeFile, inside } = require('./library.cjs');
 const { mediaResponse } = require('./media.cjs');
+const { captureMedia, webURL } = require('./capture.cjs');
 const run = promisify(execFile);
 app.setName('Eagle 开源');
 const projectRoot = app.isPackaged ? require('../workspace.json').projectRoot : path.resolve(__dirname, '../..');
@@ -53,6 +54,28 @@ function registerIPC() {
   handle('item', id => library.publicItem(library.get(id)));
   handle('edit', (ids, patch) => library.edit(ids, patch));
   handle('create-folder', (name,parent) => library.createFolder(name,parent));
+  handle('edit-folder', (id,name,parent) => library.editFolder(id,name,parent));
+  handle('smart-folder', (name,criteria) => library.createSmartFolder(name,criteria));
+  handle('record-open', id => library.recordOpen(id));
+  handle('export-files', async ids => {
+    if (!Array.isArray(ids) || !ids.length || ids.length > 2000) throw new Error('请选择要导出的素材');
+    const result = await dialog.showOpenDialog(win, { title: '导出原文件到', properties: ['openDirectory','createDirectory'] });
+    if (result.canceled) return null;
+    const destination = await fs.realpath(result.filePaths[0]);
+    if (inside(library.root,destination) || library.state.sources.some(s=>inside(s.path,destination))) throw new Error('请选择素材库之外的导出目录，保留素材库原件');
+    let count = 0;
+    for (const id of ids) {
+      const item = library.get(id), source = await library.assetPath(id,'original');
+      const name = item.name.replace(/[\x00-\x1f/\\:*?"<>|]/g,'_').slice(0,150) || '素材';
+      let index = 0;
+      for (;;) {
+        const target = path.join(destination, name + (index ? ` (${index})` : '') + (item.ext ? '.' + item.ext : ''));
+        try { await fs.copyFile(source,target,1); break; } catch (error) { if (error.code !== 'EEXIST') throw error; index++; }
+      }
+      count++;
+    }
+    return { count };
+  });
   handle('preferences', values => library.savePreferences(values));
   handle('refresh', () => library.refresh());
   handle('connect-source', async () => {
@@ -66,6 +89,8 @@ function registerIPC() {
     return result.canceled ? null : importFiles(result.filePaths, folder);
   });
   handle('drop-import', (paths,folder) => importFiles(paths,folder));
+  handle('capture-media', (items,folder) => captureMedia(library,items,folder,progress => win?.webContents.send('import-progress',progress)));
+  handle('open-url', url => shell.openExternal(webURL(url)));
   handle('reveal', async id => { const file = await library.assetPath(id,'original'); shell.showItemInFolder(file); });
   handle('open-file', async id => {
     const item = library.get(id);
@@ -124,7 +149,7 @@ else {
       { label: '显示', submenu: [{label:'搜索',accelerator:'CmdOrCtrl+F',click:()=>win?.webContents.send('menu-action','search')},{role:'togglefullscreen'}] },
       { label:'窗口',submenu:[{role:'minimize'},{role:'zoom'},{role:'front'}] },
     ]));
-    app.setAboutPanelOptions({ applicationName:'Eagle 开源', applicationVersion:'0.1.0', copyright:'独立素材客户端 · Electron / Fuse.js / TagSpaces MIT modules / Lucide' });
+    app.setAboutPanelOptions({ applicationName:'Eagle 开源', applicationVersion:app.getVersion(), copyright:'独立素材客户端 · Electron / Fuse.js / TagSpaces MIT modules / Lucide' });
     await createWindow();
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
   }).catch(error => { dialog.showErrorBox('Eagle 开源启动失败', error.message); app.quit(); });
