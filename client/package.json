@@ -1,6 +1,6 @@
 {
   "name": "eagle-open",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "独立 macOS 素材管理客户端，原 Eagle 库只读接入",
   "main": "src/main.cjs",
   "directories": {
@@ -16,7 +16,8 @@
     "prestart": "node scripts/build-native.cjs",
     "prepackage": "node scripts/build-native.cjs",
     "test:collector": "node scripts/build-native.cjs && node test/collector.test.cjs",
-    "test:video": "node scripts/make-fixtures.cjs && node --test test/video-capture.test.cjs"
+    "test:video": "node scripts/make-fixtures.cjs && node --test test/video-capture.test.cjs",
+    "test:video-drop": "node scripts/make-fixtures.cjs && node test/video-drop.test.cjs"
   },
   "keywords": [],
   "author": "祖仁泽",

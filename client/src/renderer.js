@@ -19,7 +19,7 @@ function toast(message, error = false, persistent = false) {
 }
 async function attempt(fn) { try { return await fn(); } catch(e) { toast(e.message || String(e),true); } }
 const selectedItems = () => state.items.filter(i => state.selected.has(i.id));
-api.onLibraryChanged(()=>attempt(async()=>{await summary();await load();renderInspector();}));
+api.onLibraryChanged(value=>attempt(async()=>{if(value?.capture){const c=value.capture;toast(`收集完成：新增 ${c.imported} 份，重复 ${c.duplicates} 份${c.skipped?`，失败 ${c.skipped} 份`:''}`,!!c.skipped);}await summary();await load();renderInspector();}));
 const title = () => state.smartId ? state.summary.smartFolders.find(f=>f.id===state.smartId)?.name || '智能文件夹' : state.folderId ? state.summary.folders.find(f => f.id===state.folderId)?.name || '文件夹' : ({all:'全部素材',local:'我的导入',unfiled:'未分类',untagged:'未标签',recent:'最近使用',random:'随机模式',trash:'回收站',tags:'标签管理'}[state.view] || '全部素材');
 async function summary() {
   state.summary = await api.summary();

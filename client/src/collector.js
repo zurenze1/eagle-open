@@ -32,18 +32,19 @@ const renderFolders=()=>{
 const reset=()=>{batch=null;current=null;dirty=false;selected=new Set(state.folderId?[state.folderId]:[]);document.body.classList.remove('received');$('#metadata').hidden=true;$('#preview').hidden=true;$('#preview').replaceChildren();$('#empty-preview').hidden=false;$('#thumbnails').hidden=true;$('#media-info').textContent='';$('#save-selection').hidden=true;$('#folder-search').value='';message('把素材拖到这里','图片 · 视频 · 音乐 · 文件');};
 const update=value=>{state=value;if(!initialized){selected=new Set(value.folderId?[value.folderId]:[]);initialized=true;}$('#destination').textContent='收藏到：'+value.folderName;$('#shortcut').textContent=value.shortcut?`${value.shortcut} 唤出 / 收起`:'从「显示」菜单唤出';if(value.reset&&!pending&&!dirty)reset();renderFolders();};
 api.state().then(update);api.onState(update);
+api.onHidden(()=>document.querySelectorAll('#preview video,#preview audio').forEach(media=>media.pause()));
 api.onProgress(value=>{if(pending)message('正在收集…',value.phase==='download'&&value.totalBytes?`${Math.round(value.bytes/value.totalBytes*100)}%`:`已处理 ${value.completed||0} / ${value.total||1}`);});
 const renderItem=item=>{
   current=item;dirty=false;document.body.classList.add('received');$('#empty-preview').hidden=true;$('#preview').hidden=false;$('#metadata').hidden=false;
-  const media=document.createElement(item.kind==='video'?'video':item.kind==='audio'?'audio':'img');if(['video','audio'].includes(item.kind)){media.controls=true;media.preload='metadata';media.src=item.mediaURL;}else if(item.thumbURL)media.src=item.thumbURL;else media.alt=item.ext?.toUpperCase()||'文件';$('#preview').replaceChildren(media);
-  $('#media-info').textContent=[item.ext?.toUpperCase(),item.duration?`${Number(item.duration).toFixed(1)} 秒`:null].filter(Boolean).join(' · ');
+  const media=document.createElement(item.kind==='video'?'video':item.kind==='audio'?'audio':'img');if(['video','audio'].includes(item.kind)){media.controls=true;media.preload='metadata';if(item.kind==='video'){media.muted=true;media.autoplay=true;media.loop=true;}media.src=item.mediaURL;}else if(item.thumbURL)media.src=item.thumbURL;else media.alt=item.ext?.toUpperCase()||'文件';$('#preview').replaceChildren(media);
+  $('#media-info').textContent=[item.ext?.toUpperCase(),item.kind==='video'?'视频':item.kind==='audio'?'音频':null,item.duration?`${Number(item.duration).toFixed(1)} 秒`:null].filter(Boolean).join(' · ');
   $('#item-name').value=item.name;$('#item-note').value=item.annotation||'';$('#item-tags').value=(item.tags||[]).join('，');$('#source').textContent=item.url||'';$('#source').title=item.url||'';
   $('#rating').dataset.value=item.rating||0;$('#rating').replaceChildren();for(let i=1;i<=5;i++){const star=document.createElement('button');star.type='button';star.textContent='★';star.setAttribute('aria-label',i+' 星');star.classList.toggle('on',i<=(item.rating||0));star.onclick=()=>{const rating=Number($('#rating').dataset.value)===i?0:i;$('#rating').dataset.value=rating;[...$('#rating').children].forEach((s,index)=>s.classList.toggle('on',index<rating));dirty=true;queueEdit();};$('#rating').append(star);}
   for(const button of $('#thumbnails').children)button.classList.toggle('selected',button.dataset.id===item.id);
 };
 const renderBatch=value=>{
   const strip=$('#thumbnails');strip.replaceChildren();strip.hidden=value.items.length<2;
-  for(const item of value.items){const button=document.createElement('button');button.type='button';button.dataset.id=item.id;button.title=item.name;if(item.thumbURL){const image=document.createElement('img');image.src=item.thumbURL;button.append(image);}else button.textContent=item.ext?.toUpperCase()||'文件';button.onclick=()=>{queueEdit();renderItem(item);};strip.append(button);}
+  for(const item of value.items){const button=document.createElement('button');button.type='button';button.dataset.id=item.id;const kind=({video:'视频',audio:'音频',image:'图片',font:'字体'})[item.kind]||'文件';button.title=item.name+' · '+kind;button.setAttribute('aria-label',button.title);if(item.thumbURL){const image=document.createElement('img');image.src=item.thumbURL;button.append(image);}else button.textContent=item.ext?.toUpperCase()||'文件';if(item.kind==='video'||item.kind==='audio'){const badge=document.createElement('span');badge.className='media-badge';badge.textContent=item.kind==='video'?'▶':'♫';button.append(badge);}button.onclick=()=>{queueEdit();renderItem(item);};strip.append(button);}
   if(value.items[0])renderItem(value.items[0]);
 };
 const commit=async()=>{

@@ -12,7 +12,7 @@ function createCollector({mainWindow,folder,autoEnabled,onError}){
   let lastTrigger='',lastTriggerAt=0;
   const info=()=>({folderId:folder().id,folderName:folder().name,folders:folder().folders,recent:folder().recent||[],shortcut,autoAvailable,autoEnabled:autoEnabled(),lastTrigger,lastTriggerAt,dragging});
   const update=()=>{if(ready&&!window.isDestroyed())window.webContents.send('collector-state',info());};
-  const hide=()=>{clearTimeout(timer);if(!window.isDestroyed())window.hide();over=false;editing=false;};
+  const hide=()=>{clearTimeout(timer);if(!window.isDestroyed()){window.webContents.send('collector-hidden');window.hide();}over=false;editing=false;};
   const show=(reason='manual')=>{
     if(!ready||window.isDestroyed())return;
     clearTimeout(timer);if(!editing)mode=reason;const area=screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;

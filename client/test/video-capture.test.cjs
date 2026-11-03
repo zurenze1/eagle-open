@@ -2,7 +2,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const {Library,hashFile}=require('../src/library.cjs'),{captureMedia}=require('../src/capture.cjs');
 async function setup(t){
  const root=await fs.mkdtemp(path.resolve(__dirname,'../../verification/video-contract-')),video=await fs.readFile(path.resolve(__dirname,'../../verification/fixtures/视频预览测试.mp4')),requests=[];
- const server=http.createServer((req,res)=>{requests.push(req.url);if(req.url==='/player'){res.setHeader('Content-Type','text/html');res.end('<meta property="og:video" content="/one.mp4"><meta property="og:title" content="网页视频">');}else if(req.url==='/fake.mp4'){res.setHeader('Content-Type','image/png');res.end(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6sQAAAABJRU5ErkJggg==','base64'));}else{res.setHeader('Content-Type','video/mp4');res.end(video);}});
+ const server=http.createServer((req,res)=>{requests.push(req.url);if(req.url==='/player'){res.setHeader('Content-Type','text/html');res.end('<meta property="og:video" content="/one.mp4"><meta property="og:title" content="网页视频">');}else if(req.url==='/fake-player'||req.url==='/hinted-player'){res.setHeader('Content-Type','text/html');res.end(req.url==='/fake-player'?'<video src="/fake.mp4"></video>':'<audio src="/fake.mp4"></audio>');}else if(req.url==='/fake.mp4'){res.setHeader('Content-Type','image/png');res.end(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6sQAAAABJRU5ErkJggg==','base64'));}else{res.setHeader('Content-Type','video/mp4');res.end(video);}});
  await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(async()=>{server.closeAllConnections();await new Promise(r=>server.close(r));});return {root,video,requests,origin:'http://127.0.0.1:'+server.address().port,library:await new Library(path.join(root,'data')).init()};
 }
 test('Pinterest carousel posters resolve matching MP4 originals, never JPEGs; metadata requested once per batch',async t=>{
@@ -24,4 +24,5 @@ test('An unavailable video or wrong Pin response cannot silently become a still 
 test('Public OG video imports a playable container, but an image returned for a video URL is rejected',async t=>{
  const {origin,library}=await setup(t);const good=await captureMedia(library,[{url:origin+'/player',pageOnly:true}]);assert.equal(good.imported.length,1);assert.equal(library.get(good.imported[0].id).kind,'video');
  const bad=await captureMedia(library,[{url:origin+'/fake.mp4',expectedKind:'video'}]);assert.equal(bad.imported.length,0);assert.match(bad.skipped[0].reason,/封面/);
+ for(const input of [{url:origin+'/fake-player',pageOnly:true},{url:origin+'/hinted-player',expectedKind:'video'}]){const rejected=await captureMedia(library,[input]);assert.equal(rejected.imported.length,0);assert.match(rejected.skipped[0].reason,/封面/);}
 });

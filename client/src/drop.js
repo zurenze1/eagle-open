@@ -9,6 +9,7 @@
     const base = http(document.querySelector('base[href]')?.getAttribute('href')) || links[0];
     const resolve = value => { if(typeof value!=='string'||!value.trim())return null;try { const u=new URL(value,base);return http(u.href)||(/^data:image\//i.test(u.href)?u.href:null); } catch { return null; } };
     const nodes=[...document.querySelectorAll('img[src],audio[src],video[src],source[src]')];
+    const videoHint=nodes.some(node=>node.tagName==='VIDEO'||node.closest('video'));
     const media = nodes.filter(node=>node.tagName!=='IMG'||!node.closest('a')||!nodes.some(other=>['VIDEO','AUDIO','SOURCE'].includes(other.tagName)&&other.closest('a')===node.closest('a'))).map(node => {
       const url = resolve(node.getAttribute('src'));
       const page = resolve(node.closest('a[href]')?.getAttribute('href'));
@@ -17,9 +18,9 @@
     }).filter(Boolean);
     if (!media.length) {
       const download = /^(.*?):(.*?):(https?:\/\/.*)$/s.exec(transfer.getData('DownloadURL'));
-      if (download && http(download[3])) media.push({ url: http(download[3]), name: download[2] });
+      if (download && http(download[3])) media.push({ url: http(download[3]), name: download[2],...(/^video\//i.test(download[1])?{expectedKind:'video'}:{}) });
       else if(inline)media.push({url:inline,sourceURL:links[0]||''});
-      else media.push(...links.map(url => ({ url, pageOnly:true, ...(moz[1]?{name:moz[1]}:{}) })));
+      else media.push(...links.map(url => ({ url, pageOnly:true, ...(videoHint?{expectedKind:'video'}:{}),...(moz[1]?{name:moz[1]}:{}) })));
     }
     for(const item of media){try{const page=new URL(item.sourceURL||item.url);item.resolvePage=/(^|\.)pinterest\./.test(page.hostname)&&/^\/pin\//.test(page.pathname);}catch{}}
     return [...new Map(media.map(item => [item.url, item])).values()].slice(0, 100);

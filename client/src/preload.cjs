@@ -15,5 +15,5 @@ contextBridge.exposeInMainWorld('eagleOpen', {
   reveal: id => ipcRenderer.invoke('reveal',id), openFile: id => ipcRenderer.invoke('open-file',id),
   onProgress: fn => ipcRenderer.on('import-progress',(_e,data) => fn(data)),
   onMenu: fn => ipcRenderer.on('menu-action',(_e,action) => fn(action)),
-  onLibraryChanged:fn=>ipcRenderer.on('library-changed',()=>fn()),
+  onLibraryChanged:fn=>ipcRenderer.on('library-changed',(_e,data)=>fn(data)),
 });

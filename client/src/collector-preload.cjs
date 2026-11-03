@@ -8,5 +8,6 @@ contextBridge.exposeInMainWorld('collector',{
   dropImport:(paths,folder,source)=>ipcRenderer.invoke('drop-import',paths,folder,source),
   importBytes:(input,folder)=>ipcRenderer.invoke('import-bytes',input,folder),captureMedia:(items,folder)=>ipcRenderer.invoke('capture-media',items,folder),
   filePath:file=>webUtils.getPathForFile(file),
+  onHidden:fn=>ipcRenderer.on('collector-hidden',()=>fn()),
   onState:fn=>ipcRenderer.on('collector-state',(_e,value)=>fn(value)),onProgress:fn=>ipcRenderer.on('import-progress',(_e,value)=>fn(value)),
 });

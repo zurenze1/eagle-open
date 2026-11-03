@@ -58,6 +58,7 @@ async function writeMediaBytes(input, directory) {
   const temp = path.join(directory, 'buffer.part');
   await fs.writeFile(temp, bytes, { flag: 'wx' });
   const type = await mediaType(temp), file = path.join(directory, fileName(input.name, type.ext));
+  if(input.expectedKind==='video'&&kindOf(type.ext)!=='video')throw new Error('视频临时文件实际是封面或其他文件，未作为视频保存');
   await fs.rename(temp, file);
   return { file, metadata: sourceMetadata(input), bytes: bytes.length, mime: type.mime };
 }
@@ -71,10 +72,10 @@ function pageAudio(html, url) {
   if(video)return {url:video,name:title,expectedKind:'video'};
   const declared = $('meta[property="og:audio:secure_url"],meta[property="og:audio:url"],meta[property="og:audio"]').toArray().map(el=>normalize($(el).attr('content'))).find(Boolean);
   if (declared) return { url: declared, name: title };
-  const players = $('audio,video').toArray().map(el=>normalize($(el).attr('src')) || $(el).find('source[src]').toArray().map(source=>normalize($(source).attr('src'))).find(Boolean)).filter(Boolean);
-  const unique = [...new Set(players)];
-  if (unique.length === 1) return { url: unique[0], name: title };
-  if (unique.length > 1) throw new Error('页面中有多段音频，请拖入具体音频控件或文件链接');
+  const players = $('audio,video').toArray().map(el=>({url:normalize($(el).attr('src')) || $(el).find('source[src]').toArray().map(source=>normalize($(source).attr('src'))).find(Boolean),...($(el).is('video')?{expectedKind:'video'}:{})})).filter(player=>player.url);
+  const unique = [...new Map(players.map(player=>[player.url,player])).values()];
+  if (unique.length === 1) return { ...unique[0], name: title };
+  if (unique.length > 1) throw new Error('页面中有多段音视频，请拖入具体媒体控件或文件链接');
   throw new Error('此网页没有可直接下载的公开音频或视频。请拖具体媒体或已下载文件');
 }
 async function downloadMedia(input, directory, onProgress = () => {}, { fetcher = fetch, maxBytes = 512 * 1024 * 1024, timeoutMs = 120000 } = {}) {
@@ -110,7 +111,7 @@ async function downloadMedia(input, directory, onProgress = () => {}, { fetcher 
       const chunks=[];let length=0;
       for await (const chunk of response.body) { length+=chunk.length; if(length>2*1024*1024)throw new Error('网页过大，请拖具体媒体链接');chunks.push(chunk); }
       const pageURL=webURL(response.url||target), audio=pageAudio(Buffer.concat(chunks).toString('utf8'),pageURL);
-      return await downloadMedia({ ...audio, name: input.name || audio.name, sourceURL:input.sourceURL||pageURL,pageResolved:true },directory,onProgress,{fetcher,maxBytes,timeoutMs:Math.max(1,timeoutMs-(Date.now()-startedAt))});
+      return await downloadMedia({ ...audio, expectedKind:input.expectedKind||audio.expectedKind,name: input.name || audio.name, sourceURL:input.sourceURL||pageURL,pageResolved:true },directory,onProgress,{fetcher,maxBytes,timeoutMs:Math.max(1,timeoutMs-(Date.now()-startedAt))});
     }
     if (/application\/(?:vnd.apple.mpegurl|x-mpegurl)|audio\/x-mpegurl/i.test(response.headers.get('content-type') || '')) {
       throw new Error('这是流媒体播放列表，请使用可下载的音乐或视频文件链接');

@@ -5,7 +5,9 @@
     const paths=[],virtual=[];
     for(const file of transfer.files){let nativePath='';try{nativePath=api.filePath(file);}catch{}if(nativePath)paths.push(nativePath);else if(file.size)virtual.push(file);}
     const media=window.readMediaDrop(transfer);
-    if(media.some(item=>item.resolvePage)){paths.length=0;virtual.length=0;}
+    // Browsers may provide a video URL together with an image File of its poster.
+    const posterFiles=transfer.files.length&&[...transfer.files].every(file=>/^image\//i.test(file.type)||/\.(?:avif|gif|jpe?g|png|webp)$/i.test(file.name));
+    if(media.some(item=>item.resolvePage)||(posterFiles&&media.length===1&&media[0].expectedKind==='video')){paths.length=0;virtual.length=0;}
     if(!paths.length&&!virtual.length&&!media.length)return null;
     return async()=>{
       const result={imported:[],duplicates:[],skipped:[]},merge=saved=>{for(const key of ['imported','duplicates','skipped'])result[key].push(...saved[key]);};

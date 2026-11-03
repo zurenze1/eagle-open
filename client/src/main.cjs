@@ -56,7 +56,7 @@ function registerIPC() {
     const result=await fn(...args);
     if(panel&&['drop-import','import-bytes','capture-media'].includes(name)){result.duplicates=result.duplicates.map(item=>library.publicItem(library.get(item.id)));for(const item of [...result.imported,...result.duplicates])collectorItems.add(item.id);}
     while(collectorItems.size>1000)collectorItems.delete(collectorItems.values().next().value);
-    if(panel&&['drop-import','import-bytes','capture-media','create-folder','collector-assign','collector-edit'].includes(name)&&win&&!win.isDestroyed())win.webContents.send('library-changed');
+    if(panel&&['drop-import','import-bytes','capture-media','create-folder','collector-assign','collector-edit'].includes(name)&&win&&!win.isDestroyed())win.webContents.send('library-changed',['drop-import','import-bytes','capture-media'].includes(name)?{capture:{imported:result.imported.length,duplicates:result.duplicates.length,skipped:result.skipped.length}}:null);
     return result;
   });
   handle('summary', () => library.summary());
