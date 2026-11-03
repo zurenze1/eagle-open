@@ -18,6 +18,7 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'asset', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } },
 ]);
 let win, library, collector, collectorFolder=null, quitting=false,quitPending=false;
+const collectorItems=new Set();
 const send=(name,value)=>{for(const window of [win,collector?.window])if(window&&!window.isDestroyed())window.webContents.send(name,value);};
 const ffmpeg = process.env.FFMPEG_PATH || 'ffmpeg';
 const ffprobe = process.env.FFPROBE_PATH || 'ffprobe';
@@ -50,10 +51,12 @@ function registerIPC() {
   const handle = (name, fn) => ipcMain.handle(name, async (event,...args) => {
     const main=event.sender===win?.webContents&&event.senderFrame?.url==='app://ui/index.html';
     const panel=event.sender===collector?.window.webContents&&event.senderFrame?.url==='app://ui/collector.html';
-    const panelAllowed=['collector-state','collector-close','collector-main','collector-hover','collector-working','collector-folder','collector-editing','collector-hold','collector-assign','create-folder','drop-import','import-bytes','capture-media'];
+    const panelAllowed=['collector-state','collector-close','collector-main','collector-hover','collector-working','collector-folder','collector-editing','collector-hold','collector-complete','collector-assign','collector-edit','create-folder','drop-import','import-bytes','capture-media'];
     if(!main&&!(panel&&panelAllowed.includes(name)))throw new Error('拒绝不可信页面调用');
     const result=await fn(...args);
-    if(panel&&['drop-import','import-bytes','capture-media','create-folder','collector-assign'].includes(name)&&win&&!win.isDestroyed())win.webContents.send('library-changed');
+    if(panel&&['drop-import','import-bytes','capture-media'].includes(name)){result.duplicates=result.duplicates.map(item=>library.publicItem(library.get(item.id)));for(const item of [...result.imported,...result.duplicates])collectorItems.add(item.id);}
+    while(collectorItems.size>1000)collectorItems.delete(collectorItems.values().next().value);
+    if(panel&&['drop-import','import-bytes','capture-media','create-folder','collector-assign','collector-edit'].includes(name)&&win&&!win.isDestroyed())win.webContents.send('library-changed');
     return result;
   });
   handle('summary', () => library.summary());
@@ -108,7 +111,10 @@ function registerIPC() {
   handle('collector-working',(value,failed)=>collector.working(value,failed));
   handle('collector-editing',value=>collector.editing(value));
   handle('collector-hold',()=>collector.hold());
-  handle('collector-assign',async(ids,folder)=>{if(!Array.isArray(ids)||!ids.length||ids.length>1000)throw new Error('请选择当前收集的素材');for(const id of ids){const item=library.get(id);if(item.source!=='local')throw new Error('此入口仅整理新导入的独立素材');await library.edit([id],{folders:[...new Set([...item.folders,folder])]});}});
+  const checkCollected=ids=>{if(!Array.isArray(ids)||!ids.length||ids.length>1000||ids.some(id=>!collectorItems.has(id)))throw new Error('此入口仅整理本次收集的素材');};
+  handle('collector-assign',async(ids,folder)=>{checkCollected(ids);if(folder===null)return;if(!library.folders().some(f=>f.id===folder))throw new Error('文件夹已不存在');for(const id of ids){const item=library.get(id);await library.edit([id],{folders:[...new Set([...item.folders,folder])]});}const recent=[folder,...(library.state.preferences.collectorRecent||[]).filter(id=>id!==folder)].slice(0,5);await library.savePreferences({collectorRecent:recent});collector.update();});
+  handle('collector-edit',(ids,patch)=>{checkCollected(ids);return library.edit(ids,Object.fromEntries(['name','annotation','tags','rating'].filter(key=>Object.hasOwn(patch,key)).map(key=>[key,patch[key]])));});
+  handle('collector-complete',()=>collector.complete());
   handle('collector-folder',id=>{if(id!==null&&!library.folders().some(f=>f.id===id))throw new Error('文件夹已不存在，请重新选择');collectorFolder=id;collector.update();return id;});
   handle('collector-main',()=>{collector.hide();if(win.isMinimized())win.restore();win.show();win.focus();});
   handle('open-url', url => shell.openExternal(webURL(url)));
@@ -178,7 +184,7 @@ else {
     ]));
     app.setAboutPanelOptions({ applicationName:'Eagle 开源', applicationVersion:app.getVersion(), copyright:'独立素材客户端 · Electron / Fuse.js / TagSpaces MIT modules / Lucide' });
     await createWindow();
-    collector=createCollector({mainWindow:()=>win,folder:()=>({id:collectorFolder,name:library.folders().find(f=>f.id===collectorFolder)?.name||'素材库',folders:library.folders()}),autoEnabled:()=>library.state.preferences.collectorAuto!==false,onError:message=>console.error('自动收集框不可用：'+message)});
+    collector=createCollector({mainWindow:()=>win,folder:()=>({id:collectorFolder,name:library.folders().find(f=>f.id===collectorFolder)?.name||'素材库',folders:library.folders(),recent:library.state.preferences.collectorRecent||[]}),autoEnabled:()=>library.state.preferences.collectorAuto!==false,onError:message=>console.error('自动收集框不可用：'+message)});
     app.on('activate', () => { if(win&&!win.isDestroyed()){win.show();win.focus();}else createWindow(); });
   }).catch(error => { dialog.showErrorBox('Eagle 开源启动失败', error.message); app.quit(); });
   app.on('window-all-closed', () => app.quit());

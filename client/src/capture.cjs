@@ -2,6 +2,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { kindOf } = require('./library.cjs');
+const {resolvePin}=require('./pinterest.cjs');
 const VIRTUAL_LIMIT = 32 * 1024 * 1024;
 
 function webURL(value) {
@@ -66,13 +67,15 @@ function pageAudio(html, url) {
   let base=url;try{if($('base[href]').attr('href'))base=webURL(new URL($('base[href]').attr('href'),url).href);}catch{}
   const normalize = raw => { if (!raw?.trim()) return null; try { return webURL(new URL(raw,base).href); } catch { return null; } };
   const title = $('meta[property="og:title"]').attr('content') || $('title').text().trim();
+  const video=$('meta[property="og:video:secure_url"],meta[property="og:video:url"],meta[property="og:video"]').toArray().map(el=>normalize($(el).attr('content'))).find(Boolean);
+  if(video)return {url:video,name:title,expectedKind:'video'};
   const declared = $('meta[property="og:audio:secure_url"],meta[property="og:audio:url"],meta[property="og:audio"]').toArray().map(el=>normalize($(el).attr('content'))).find(Boolean);
   if (declared) return { url: declared, name: title };
-  const players = $('audio').toArray().map(el=>normalize($(el).attr('src')) || $(el).find('source[src]').toArray().map(source=>normalize($(source).attr('src'))).find(Boolean)).filter(Boolean);
+  const players = $('audio,video').toArray().map(el=>normalize($(el).attr('src')) || $(el).find('source[src]').toArray().map(source=>normalize($(source).attr('src'))).find(Boolean)).filter(Boolean);
   const unique = [...new Set(players)];
   if (unique.length === 1) return { url: unique[0], name: title };
   if (unique.length > 1) throw new Error('页面中有多段音频，请拖入具体音频控件或文件链接');
-  throw new Error('此网页没有可直接下载的公开音频。请拖图片本身、音乐文件链接或已下载文件');
+  throw new Error('此网页没有可直接下载的公开音频或视频。请拖具体媒体或已下载文件');
 }
 async function downloadMedia(input, directory, onProgress = () => {}, { fetcher = fetch, maxBytes = 512 * 1024 * 1024, timeoutMs = 120000 } = {}) {
   const startedAt=Date.now();
@@ -124,6 +127,7 @@ async function downloadMedia(input, directory, onProgress = () => {}, { fetcher 
     await handle.close(); handle = null;
     if (!bytes) throw new Error('下载到的文件为空');
     const type = await mediaType(temp);
+    if(input.expectedKind==='video'&&kindOf(type.ext)!=='video')throw new Error('视频地址返回了封面或其他文件，未作为视频保存');
     const finalURL = webURL(response.url || target);
     const file = path.join(directory, fileName(input.name || responseName(response.headers, finalURL), type.ext));
     await fs.rename(temp, file);
@@ -141,6 +145,12 @@ async function importMediaBytes(library,input,folderId) {
 async function captureMedia(library, inputs, folderId, onProgress = () => {}, options = {}) {
   if (!Array.isArray(inputs) || !inputs.length || inputs.length > 100) throw new Error('一次可采集 1–100 个媒体链接');
   const result = { imported: [], duplicates: [], skipped: [] };
+  const cache=new Map(),resolved=[],seen=new Set();
+  for(const input of inputs){
+    try{for(const media of await resolvePin(input,options,cache))if(!seen.has(media.url)){seen.add(media.url);resolved.push(media);}}
+    catch(error){result.skipped.push({name:input.name||'网页媒体',reason:error.name==='TimeoutError'?'网页媒体解析超时，请重试':error.message});}
+  }
+  inputs=resolved;
   for (let index = 0; index < inputs.length; index++) {
     const directory = await fs.mkdtemp(path.join(path.dirname(library.root), '.capture-'));
     try {

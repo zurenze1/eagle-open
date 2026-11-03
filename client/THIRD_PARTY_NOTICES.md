@@ -15,3 +15,5 @@
 TagSpaces npm 发布的 gitHead 为 `35a1d601cc47a62745eea22b0dc2861569679f40`。裁剪文件保留版权；仅更改 require 路径指向本地 AppConfig.cjs。未复制 AGPL 主应用的实现、未使用可选 Pro 模块。上游主应用仅作调研参考，不包含在本仓库或应用中。
 
 应用图标由本项目脚本绘制，不使用 Eagle 图标。完整第三方授权条款随对应文件保留。本项目已公开源码，项目自身授权条款尚未确定，暂标 UNLICENSED。
+
+Pinterest 公共媒体协议参考 [yt-dlp 的 Pinterest 提取器](https://github.com/yt-dlp/yt-dlp/blob/master/yt_dlp/extractor/pinterest.py)（Unlicense）。本项目独立实现公开元数据解析、轮播封面与对应 MP4 的匹配，没有打包 yt-dlp Python 模块或可执行文件。

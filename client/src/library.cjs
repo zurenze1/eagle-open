@@ -326,6 +326,7 @@ class Library {
   savePreferences(values) {
     return this.transact(async () => {
       if(typeof values.collectorAuto==='boolean')this.state.preferences.collectorAuto=values.collectorAuto;
+      if(Array.isArray(values.collectorRecent)){const allowed=new Set(this.folders().map(f=>f.id));this.state.preferences.collectorRecent=unique(values.collectorRecent.filter(id=>allowed.has(id))).slice(0,5);}
       if (Number.isFinite(values.thumbSize)) this.state.preferences.thumbSize = Math.max(110, Math.min(280, values.thumbSize));
       if (['newest','oldest','name','size','rating'].includes(values.sort)) this.state.preferences.sort = values.sort;
       if (['grid','masonry','list'].includes(values.layout)) this.state.preferences.layout = values.layout;

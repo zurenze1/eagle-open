@@ -4,18 +4,20 @@ const path=require('node:path');
 const readline=require('node:readline');
 
 function createCollector({mainWindow,folder,autoEnabled,onError}){
-  const window=new BrowserWindow({width:296,height:296,show:false,frame:false,resizable:false,transparent:true,hasShadow:true,alwaysOnTop:true,skipTaskbar:true,focusable:true,acceptFirstMouse:true,type:'panel',
+  const window=new BrowserWindow({width:660,height:480,show:false,frame:false,resizable:false,transparent:true,hasShadow:true,alwaysOnTop:true,skipTaskbar:true,focusable:true,acceptFirstMouse:true,type:'panel',
     webPreferences:{preload:path.join(__dirname,'collector-preload.cjs'),sandbox:true,contextIsolation:true,nodeIntegration:false,webSecurity:true,backgroundThrottling:false}});
   window.setVisibleOnAllWorkspaces(true,{visibleOnFullScreen:true,skipTransformProcessType:true});
   window.webContents.setWindowOpenHandler(()=>({action:'deny'}));window.webContents.on('will-navigate',e=>e.preventDefault());
   let ready=false,mode='auto',busy=false,over=false,editing=false,dragging=false,suppressed=false,timer,watcher,shortcut='',accelerator='',autoAvailable=false;
-  const info=()=>({folderId:folder().id,folderName:folder().name,folders:folder().folders,shortcut,autoAvailable,autoEnabled:autoEnabled()});
+  let lastTrigger='',lastTriggerAt=0;
+  const info=()=>({folderId:folder().id,folderName:folder().name,folders:folder().folders,recent:folder().recent||[],shortcut,autoAvailable,autoEnabled:autoEnabled(),lastTrigger,lastTriggerAt,dragging});
   const update=()=>{if(ready&&!window.isDestroyed())window.webContents.send('collector-state',info());};
-  const hide=()=>{clearTimeout(timer);if(!window.isDestroyed())window.hide();over=false;};
+  const hide=()=>{clearTimeout(timer);if(!window.isDestroyed())window.hide();over=false;editing=false;};
   const show=(reason='manual')=>{
     if(!ready||window.isDestroyed())return;
     clearTimeout(timer);if(!editing)mode=reason;const area=screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
-    window.setPosition(area.x+area.width-312,Math.round(area.y+(area.height-window.getBounds().height)/2));window.webContents.send('collector-state',{...info(),reset:!busy});window.showInactive();
+    lastTrigger=reason;lastTriggerAt=Date.now();window.setSize(Math.min(660,area.width-24),Math.min(480,area.height-24));
+    window.setPosition(area.x+area.width-window.getBounds().width-12,Math.round(area.y+(area.height-window.getBounds().height)/2));window.webContents.send('collector-state',{...info(),reset:!busy&&!editing});window.showInactive();
   };
   const later=ms=>{clearTimeout(timer);timer=setTimeout(()=>{if(!busy&&!over&&!editing&&mode==='auto')hide();},ms);};
   const drag=value=>{
@@ -25,7 +27,7 @@ function createCollector({mainWindow,folder,autoEnabled,onError}){
   };
   window.loadURL('app://ui/collector.html').then(()=>{ready=true;update();});
   for(const key of ['Control+Alt+E','Control+Alt+Shift+E']){
-    if(globalShortcut.register(key,()=>{if(window.isVisible())hide();else show('manual');})){accelerator=key;shortcut=key==='Control+Alt+E'?'⌃⌥E':'⌃⌥⇧E';break;}
+    if(globalShortcut.register(key,()=>{lastTrigger='shortcut';lastTriggerAt=Date.now();if(window.isVisible())safeHide();else {show('shortcut');mode='manual';}})){accelerator=key;shortcut=key==='Control+Alt+E'?'⌃⌥E':'⌃⌥⇧E';break;}
   }
   if(process.platform==='darwin'){
     watcher=spawn(path.join(__dirname,'../assets/drag-watch'),[],{stdio:['pipe','pipe','pipe']});
@@ -34,12 +36,14 @@ function createCollector({mainWindow,folder,autoEnabled,onError}){
     watcher.on('error',error=>{autoAvailable=false;update();onError(error.message);});
     watcher.on('exit',()=>{autoAvailable=false;update();});watcher.stderr.resume();
   }
+  const safeHide=async()=>{try{await window.webContents.executeJavaScript('window.flushPendingEdits ? window.flushPendingEdits() : Promise.resolve()');hide();}catch(error){onError(error.message);}};
   return {window,show,hide,info,update,drag,
     hold(){mode='manual';clearTimeout(timer);},
     hover(value){over=!!value;if(over)clearTimeout(timer);else if(mode==='auto')later(700);},
     working(value,failed=false){busy=!!value;if(!busy&&mode==='auto')later(failed?12000:1800);},
-    editing(value){editing=!!value;clearTimeout(timer);if(editing)mode='manual';window.setSize(296,editing?434:296);if(editing)window.focus();},
-    dismiss(){suppressed=dragging;hide();},
+    editing(value){editing=!!value;clearTimeout(timer);if(editing)mode='manual';if(editing)window.focus();},
+    complete(){editing=false;mode='auto';later(1800);},
+    dismiss(){suppressed=dragging;return safeHide();},
     dispose(){clearTimeout(timer);if(accelerator)globalShortcut.unregister(accelerator);watcher?.kill();},
   };
 }

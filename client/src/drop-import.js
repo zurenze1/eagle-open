@@ -5,6 +5,7 @@
     const paths=[],virtual=[];
     for(const file of transfer.files){let nativePath='';try{nativePath=api.filePath(file);}catch{}if(nativePath)paths.push(nativePath);else if(file.size)virtual.push(file);}
     const media=window.readMediaDrop(transfer);
+    if(media.some(item=>item.resolvePage)){paths.length=0;virtual.length=0;}
     if(!paths.length&&!virtual.length&&!media.length)return null;
     return async()=>{
       const result={imported:[],duplicates:[],skipped:[]},merge=saved=>{for(const key of ['imported','duplicates','skipped'])result[key].push(...saved[key]);};

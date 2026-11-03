@@ -1,7 +1,12 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'"><link rel="stylesheet" href="collector.css"><title>快捷收集</title></head><body>
-<section id="collector-box"><header><span><b></b>快捷收集</span><button id="close" title="收起收集框" aria-label="收起收集框">×</button></header>
-<div id="drop-target"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M9 30v8h30v-8M24 8v23M15 22l9 9 9-9"/></svg><strong id="status">把素材拖到这里</strong><span id="hint">图片 · 音乐 · 文件</span></div>
-<div class="folder-picker"><select id="folder-select" aria-label="收藏文件夹"></select><button id="new-folder" title="新建文件夹" aria-label="新建文件夹">＋</button></div>
+<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' asset: data: blob:; media-src asset:; connect-src 'none'"><link rel="stylesheet" href="collector.css"><title>快捷收集</title></head><body>
+<section id="collector-box"><header><span><b></b>快捷收集</span><span id="shortcut"></span><button id="close" title="收起收集框" aria-label="收起收集框">×</button></header>
+<div class="panes"><section class="collection">
+<div id="drop-target"><div id="empty-preview"><svg viewBox="0 0 120 100" aria-hidden="true"><path d="M12 24V13h33l12 11h50v65H12z"/><path d="M20 31h95l-10 58H10z"/><path d="M53 48h24v23H53zM65 48v-8M65 71v8M53 59h-8M77 59h8"/></svg><strong>拖拽到这里添加素材</strong><span>放下后，选择右侧文件夹</span></div><div id="preview" hidden></div><span id="media-info"></span></div>
+<div id="thumbnails" hidden></div>
+<form id="metadata" hidden><div id="rating" aria-label="素材星级"></div><input id="item-name" aria-label="素材名称" placeholder="素材名称" maxlength="500"><textarea id="item-note" aria-label="添加注释" placeholder="添加注释" maxlength="50000"></textarea><input id="item-tags" aria-label="添加标签" placeholder="＋ 添加标签（逗号分隔）"><small id="source"></small></form>
+<div id="feedback" role="status"><strong id="status">把素材拖到这里</strong><span id="hint">图片 · 视频 · 音乐 · 文件</span></div>
+</section><section class="folders"><div class="folder-search"><span>⌕</span><input id="folder-search" aria-label="搜索文件夹" placeholder="搜索文件夹…"><span class="library-name">素材库</span></div><div id="folder-list" role="tree" aria-label="收藏文件夹"></div><button id="new-folder">＋ 建立或选择文件夹</button>
 <form id="folder-form" hidden><input id="folder-name" required maxlength="200" placeholder="文件夹名称" aria-label="文件夹名称"><select id="folder-parent" aria-label="上级文件夹"></select><div><button id="folder-cancel" type="button">取消</button><button type="submit">创建并选中</button></div></form>
-<footer><span id="destination">收藏到：素材库</span><button id="open-main">打开素材库</button></footer><small id="shortcut"></small>
+<div class="folder-footer"><span>⌘ 多选　↑ ↓ 移动　↵ 选择</span><button id="save-selection" hidden>保存分类</button></div></section></div>
+<footer><span id="destination">收藏到：素材库</span><button id="open-main">打开素材库 ↗</button></footer>
 </section><script src="drop.js"></script><script src="drop-import.js"></script><script src="collector.js"></script></body></html>
